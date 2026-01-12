@@ -430,3 +430,69 @@ if len(deduped) > 50:
 **Known limitation:** Shell pipes (`|`) in task content conflict with delimiter. Acceptable for voice input use case.
 
 ---
+
+### Deep Research Eval Framework Designed (2026-01-12)
+
+**Project:** deep-research-v0
+
+**Goal:** Create reproducible evaluation system to measure pipeline quality.
+
+**Key decisions:**
+
+1. **Two-stage evaluation:**
+   - Upstream: Fact extraction quality (before synthesis)
+   - Downstream: Report generation quality (after synthesis)
+
+2. **LLM-based scoring (not regex):**
+   - Batched calls for efficiency (~$0.05-0.10 per eval)
+   - 1-5 scale: 5=expert-useful, 3=familiar-useful, 1=fluff
+   - Relative thresholds (% not absolute counts)
+
+3. **Metrics finalized:**
+   - `avg_fact_quality` ≥3.5
+   - `avg_theme_coverage` ≥3.5
+   - `duplicate_rate` ≤2%
+   - `avg_citation_accuracy` ≥4.0
+   - `uncited_rate` ≤5%
+
+4. **Test modes:**
+   - Mini (15 facts): Every PR
+   - Medium (50 facts): Medium changes
+   - Full (150 facts, 3 queries): Large changes / weekly
+
+5. **Deferred:**
+   - Source verification via LLM (too expensive for v1)
+   - Using `match_score` as cheap proxy instead
+
+**Files created:**
+- `deep-research-v0/scripts/benchmark.py` - Standalone regex evaluator
+- `deep-research-v0/specs/benchmark_system.md` - Design doc
+- `deep-research-v0/tests/fixtures/gold_queries/baseline_2026-01-12.json`
+
+**Baseline metrics (agentic_coding_2026):**
+- 78 facts, 5 themes
+- Specificity: 29.5%
+- Vague rate: 21.8%
+- Citation rate: 72.9%
+
+**Next:** Build LLM-based evaluator to replace regex heuristics.
+
+---
+
+### Council-v3 Complete (2026-01-12)
+
+**Session summary:**
+- Implemented task queue system with planning tools
+- Review subagent found 2 critical bugs (lost task on dequeue failure, empty task list crash)
+- Fixed both bugs, added 4 edge case tests
+- 87 tests total, all passing
+- Pushed to GitHub: `b6a9e81`
+
+**Future tasks evaluated:**
+- Cross-agent visibility: SKIP - agents on separate projects, not useful
+- Voice command parsing: SKIP - working fine
+- Status dashboard: SKIP - `status` command sufficient
+
+**Decision:** Council-v3 is feature-complete. Build for friction, not features.
+
+---

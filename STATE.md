@@ -1,6 +1,6 @@
 # STATE.md
 
-## Current Phase: Ready to Use (2026-01-12)
+## Current Phase: Complete (2026-01-12)
 
 Building council-v3 as hybrid of:
 1. **Dispatcher** (from council-v2) - FIFO, Pushover, Telegram, tmux routing
@@ -102,12 +102,16 @@ council-v3/
 - [x] **Dispatcher test suite** - 57 tests covering state detection, command parsing, circuit breaker, tmux
 - [x] **Task queue system** - Send multiple pipe-separated tasks, execute sequentially (84 tests total)
 
-## Future Tasks (from CLAUDE.md)
+## Future Tasks
 
-1. ~~Task queue system~~ - DONE
-2. Cross-agent visibility - See what other agents produced
-3. Voice command parsing - Better handling of complex multi-step voice input
-4. Status dashboard - Web or TUI view of all agent states
+All planned features complete. Remaining ideas evaluated and skipped:
+
+- ~~Task queue system~~ - DONE
+- ~~Cross-agent visibility~~ - SKIP (agents on separate projects, not useful)
+- ~~Voice command parsing~~ - SKIP (working fine)
+- ~~Status dashboard~~ - SKIP (`status` command sufficient)
+
+**Philosophy:** Build for friction, not features. Add when real pain points emerge.
 
 ## How to Run
 
