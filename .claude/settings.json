@@ -1,0 +1,58 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python*)",
+      "Bash(pip*)",
+      "Bash(pytest*)",
+      "Bash(git status*)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(git branch*)",
+      "Bash(git checkout*)",
+      "Bash(git add*)",
+      "Bash(git commit*)",
+      "Bash(git push*)",
+      "Bash(git pull*)",
+      "Bash(git fetch*)",
+      "Bash(gh pr*)",
+      "Bash(gh issue*)",
+      "Bash(ls*)",
+      "Bash(cat*)",
+      "Bash(find*)",
+      "Bash(grep*)",
+      "Bash(head*)",
+      "Bash(tail*)",
+      "Bash(wc*)",
+      "Bash(mkdir*)",
+      "Bash(touch*)",
+      "Bash(tmux*)",
+      "Bash(pkill*)",
+      "Bash(pgrep*)"
+    ],
+    "deny": []
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "black \"$CLAUDE_FILE_PATH\" 2>/dev/null || true"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "terminal-notifier -title 'Council v3' -message 'Agent finished in $(basename $(pwd))' -sound default 2>/dev/null || true"
+          }
+        ]
+      }
+    ]
+  }
+}

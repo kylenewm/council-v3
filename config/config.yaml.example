@@ -1,0 +1,32 @@
+# Council v3 Configuration
+# Copy to ~/.council/config.yaml and customize
+
+agents:
+  1:
+    pane_id: "%0"
+    name: "Agent 1"
+    worktree: ~/projects/project-a
+  2:
+    pane_id: "%1"
+    name: "Agent 2"
+    worktree: ~/projects/project-b
+
+# Voice input via FIFO (Whispr Flow)
+fifo_path: ~/.council/in.fifo
+poll_interval: 2.0
+
+# Pushover notifications (optional)
+pushover:
+  # Outbound notifications
+  user_key: "your-user-key"
+  api_token: "your-api-token"
+  # Inbound commands (Open Client)
+  email: "your-email"
+  password: "your-password"
+  device_name: "council"
+
+# Telegram bot (optional)
+telegram:
+  bot_token: "your-bot-token"
+  allowed_user_ids:
+    - 123456789  # Your Telegram user ID
