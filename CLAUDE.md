@@ -176,3 +176,38 @@ After implementing, ask: "Is this verified?" If no, spawn verify-app or run /don
 |------|---------|
 | STATE.md | Current work, decisions |
 | LOG.md | History (append-only) |
+| REFLECTIONS.md | Self-reflection on struggles, gaps, and future optimizations |
+
+---
+
+## Post-Task Reflection
+
+**After completing a task, before running /ship, reflect in REFLECTIONS.md:**
+
+Ask yourself:
+- What was harder than expected?
+- What context was missing or unclear?
+- What tools/commands didn't work well?
+- What would have made this easier?
+
+**Append to REFLECTIONS.md** with format:
+```markdown
+## [Date] [Task Summary]
+**What worked:**
+**What was hard:**
+**What would help next time:**
+```
+
+This captures friction without interrupting flow. Do it once at the end, not during work.
+
+---
+
+## Future Tasks
+
+After completing current work, pick from this queue:
+
+1. **Task queue system** - Send multiple tasks, execute sequentially
+2. **Cross-agent visibility** - See what other agents produced
+3. **Refactor simple.py** - 650 lines is unwieldy, split into modules
+4. **Voice command parsing** - Better handling of complex multi-step voice input
+5. **Status dashboard** - Web or TUI view of all agent states
