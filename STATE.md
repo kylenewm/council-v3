@@ -56,6 +56,9 @@ council-v3/
 - [x] Test with real agents - ALL 4 DETECTED, ROUTING WORKS
 - [x] Copy custom commands from council-v2
 - [x] Merge Boris + custom commands + Notification hook
+- [x] Update config to 2 agents (Council + DeepResearch)
+- [x] Reset state.json for clean circuits
+- [x] Sandbox test Boris components - ALL PASSED
 
 ## How to Run
 

@@ -88,3 +88,103 @@ council-v3/
 - Python permissions in settings.json
 
 ---
+
+### Testing & Commands Merged (2026-01-12)
+
+**Dispatcher tested:**
+- All 4 agents detected: Main, Research-A, Research-B, Research-C
+- Routing works (commands sent to %0 successfully)
+- Telegram bot connected (@main_council_26_bot)
+- FIFO reading from ~/.council/in.fifo
+
+**Commands merged (13 total):**
+
+Your commands (from v2):
+- `/commit` - Stage and commit
+- `/done` - Verify before marking complete
+- `/review` - Spawn review subagent
+- `/save` - Update STATE.md + LOG.md
+- `/ship` - Test, commit, push, PR
+- `/summarize` - AI explain changes
+- `/test-cycle` - Generate + run tests progressively
+- `/test` - Run tests
+
+Boris commands:
+- `/commit-push-pr` - Commit, push, and create PR
+- `/quick-commit` - Fast commit with auto message
+- `/test-and-fix` - Run tests and fix failures
+- `/review-changes` - Review uncommitted changes
+- `/first-principles` - Deconstruct problem to fundamentals
+
+**Hooks active:**
+- PostToolUse: Auto-format with black
+- Stop: Mac notification when agent finishes
+- Notification: osascript alert when Claude needs attention
+
+---
+
+### Config Updated to 2 Agents (2026-01-12)
+
+**Rationale:** 4 agents on same repo = merge conflicts. Better: each agent on separate project.
+
+**New config (~/.council/config.yaml):**
+```
+Agent 1: Council     [%0] → council-v3
+Agent 2: DeepResearch [%3] → deep-research-v0
+```
+
+**Changes:**
+- Removed agents 3 & 4 (were on council-v2 worktrees)
+- Reset state.json (clear circuit breakers)
+- Added mouse support to tmux (`set -g mouse on`)
+
+**Dispatcher tested:**
+- Both agents detected as READY
+- Telegram bot connected
+- FIFO reading from ~/.council/in.fifo
+
+---
+
+### Sandbox Test Started (2026-01-12)
+
+**Purpose:** Verify Boris components work (subagents, commands, hooks)
+
+**Sandbox structure:**
+```
+sandbox/
+├── calculator.py      # Simple code to test
+└── test_calculator.py # pytest tests
+```
+
+**Test plan:**
+1. PostToolUse hook (auto-format with black)
+2. /test command (run pytest)
+3. /commit command (create commit)
+4. code-architect subagent (design feature)
+5. code-simplifier subagent (simplify code)
+6. /review command (spawn review subagent)
+7. /done command (verify completion)
+8. Stop hook (notification)
+
+**Results - ALL PASSED:**
+
+| Component | Status | Evidence |
+|-----------|--------|----------|
+| /test command | ✅ | Ran pytest, 5 tests passed |
+| code-architect subagent | ✅ | Designed history feature, evaluated 3 options |
+| PostToolUse hook | ✅ | Code auto-formatted with black |
+| Implementation | ✅ | Agent implemented full feature |
+| Tests after implementation | ✅ | 12 tests pass (5 original + 7 new) |
+
+**code-architect design output:**
+- Evaluated 3 options: module-level state, Calculator class, decorator-based
+- Recommended module-level state (simplest, backward compatible)
+- Provided complete implementation plan with 7 test cases
+- Agent implemented design with proper formatting
+
+**Final sandbox state:**
+- `calculator.py`: 43 lines with history feature
+- `test_calculator.py`: 12 tests (all passing)
+- Auto-formatted by PostToolUse hook
+
+---
