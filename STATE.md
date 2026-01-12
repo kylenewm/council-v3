@@ -77,12 +77,16 @@ council-v3/
 - [x] Research Boris's actual setup vs community repos
 - [x] Document findings in CLAUDE-RESEARCH.md
 
-## Current Agent Tasks (2026-01-12)
+## Current Agent Configuration
 
-| Agent | Task | Status |
-|-------|------|--------|
-| Agent 1 (Notifications) | Rich notifications complete | Done |
-| Agent 2 (Ralph) | Ralph plugin + task tracking | Done |
+| Agent | Project | Status |
+|-------|---------|--------|
+| Agent 1 (Council) | council-v3 | Ready |
+| Agent 2 (DeepResearch) | deep-research-v0 | Ready |
+
+**Shared setup copied to deep-research-v0:**
+- ✅ 5 Boris agents (code-architect, verify-app, etc.)
+- ✅ Stop hook for rich notifications
 
 ## v1 Features Complete
 
