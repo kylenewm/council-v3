@@ -100,14 +100,14 @@ council-v3/
 - [x] Notification system tested end-to-end (Mac + Pushover)
 - [x] Dispatcher writes current_task.txt for rich notifications
 - [x] **Dispatcher test suite** - 57 tests covering state detection, command parsing, circuit breaker, tmux
+- [x] **Task queue system** - Send multiple pipe-separated tasks, execute sequentially (84 tests total)
 
 ## Future Tasks (from CLAUDE.md)
 
-1. Task queue system - Send multiple tasks, execute sequentially
+1. ~~Task queue system~~ - DONE
 2. Cross-agent visibility - See what other agents produced
-3. **Refactor simple.py** - 888 lines, now safe with test coverage
-4. Voice command parsing - Better handling of complex multi-step voice input
-5. Status dashboard - Web or TUI view of all agent states
+3. Voice command parsing - Better handling of complex multi-step voice input
+4. Status dashboard - Web or TUI view of all agent states
 
 ## How to Run
 
@@ -116,7 +116,10 @@ council-v3/
 python -m council.dispatcher.simple
 
 # Commands:
-#   1: <text>    Send to agent 1
-#   status       Show all agents
-#   quit         Exit
+#   1: <text>       Send to agent 1
+#   1: t1 | t2      Send t1 now, queue t2
+#   queue 1         Show queue
+#   clear 1         Clear queue
+#   status          Show all agents
+#   quit            Exit
 ```

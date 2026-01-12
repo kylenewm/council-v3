@@ -17,6 +17,9 @@ Usage:
 
 Commands:
     1: <text>    Send <text> to agent 1
+    1: t1 | t2   Send t1 now, queue t2 for later
+    queue 1      Show queue for agent 1
+    clear 1      Clear queue for agent 1
     auto 1       Enable auto-continue for agent 1
     stop 1       Disable auto-continue for agent 1
     reset 1      Reset circuit breaker for agent 1
@@ -76,6 +79,8 @@ class Agent:
     circuit_state: str = "closed"  # closed, open
     no_progress_streak: int = 0
     last_snapshot: Optional[GitSnapshot] = None
+    # Task queue
+    task_queue: list[str] = field(default_factory=list)
 
 
 NOTIFY_COOLDOWN = 30.0  # Seconds between notifications per agent
@@ -115,12 +120,13 @@ class PushoverClient:
 
 def save_state(config: Config):
     """Save agent state to JSON file."""
-    state = {"version": 1, "agents": {}}
+    state = {"version": 2, "agents": {}}
     for agent_id, agent in config.agents.items():
         state["agents"][str(agent_id)] = {
             "auto_enabled": agent.auto_enabled,
             "circuit_state": agent.circuit_state,
             "no_progress_streak": agent.no_progress_streak,
+            "task_queue": agent.task_queue,
         }
     with _state_lock:
         try:
@@ -146,6 +152,7 @@ def load_state(config: Config):
                     agent.auto_enabled = agent_state.get("auto_enabled", False)
                     agent.circuit_state = agent_state.get("circuit_state", "closed")
                     agent.no_progress_streak = agent_state.get("no_progress_streak", 0)
+                    agent.task_queue = agent_state.get("task_queue", [])
             print(f"[STATE] Restored from {STATE_FILE}")
         except Exception as e:
             print(f"[WARN] Could not load state: {e}")
@@ -510,14 +517,26 @@ def check_agents(config: Config) -> list[str]:
                             notify(f"{agent.name}: circuit open - no progress", config)
                             save_state(config)
 
+                    # Dequeue from task queue (takes priority over auto-continue)
+                    if agent.task_queue and agent.circuit_state == "closed":
+                        next_task = agent.task_queue[0]  # Peek first
+                        if agent.worktree:
+                            agent.last_snapshot = take_snapshot(agent.worktree)
+                        if tmux_send(agent.pane_id, next_task):
+                            agent.task_queue.pop(0)  # Pop after successful send
+                            changes.append(f"  -> queued task: {next_task[:40]}...")
+                            changes.append(f"     [{len(agent.task_queue)} remaining]")
+                            agent.state = "working"
+                            write_current_task(agent, next_task)
+                            save_state(config)
                     # Auto-continue (simplified - just send "continue")
-                    if agent.auto_enabled and agent.circuit_state == "closed":
+                    elif agent.auto_enabled and agent.circuit_state == "closed":
                         if agent.worktree:
                             agent.last_snapshot = take_snapshot(agent.worktree)
                         if tmux_send(agent.pane_id, "continue"):
                             changes.append(f"  -> auto-continue sent")
                             agent.state = "working"
-                    elif not agent.auto_enabled:
+                    elif not agent.auto_enabled and not agent.task_queue:
                         # Notify user
                         now = time.time()
                         if now - agent.last_notify >= NOTIFY_COOLDOWN:
@@ -553,6 +572,8 @@ def show_status(config: Config):
             extras.append("AUTO")
         if agent.circuit_state == "open":
             extras.append("CIRCUIT OPEN")
+        if agent.task_queue:
+            extras.append(f"Q:{len(agent.task_queue)}")
         extras_str = f" [{' '.join(extras)}]" if extras else ""
 
         print(f"  {agent.id}: {agent.name} [{agent.pane_id}] - {status}{extras_str}")
@@ -593,6 +614,15 @@ def parse_command(line: str) -> tuple[Optional[int], Optional[str]]:
     if reset_match:
         return int(reset_match.group(1)), "reset"
 
+    # Queue management commands
+    queue_match = re.match(r"^queue\s+(\d+)$", line, re.IGNORECASE)
+    if queue_match:
+        return int(queue_match.group(1)), "queue"
+
+    clear_match = re.match(r"^clear\s+(\d+)$", line, re.IGNORECASE)
+    if clear_match:
+        return int(clear_match.group(1)), "clear"
+
     # Agent command: "1: do something"
     match = re.match(r"^(\d+)[:\s]+(.+)$", line)
     if match:
@@ -613,12 +643,15 @@ def process_line(line: str, config: Config) -> bool:
         show_status(config)
     elif command == "help":
         print("\nCommands:")
-        print("  1: <text>  - Send <text> to agent 1")
-        print("  auto 1     - Enable auto-continue for agent 1")
-        print("  stop 1     - Disable auto-continue for agent 1")
-        print("  reset 1    - Reset circuit breaker for agent 1")
-        print("  status     - Show agent status")
-        print("  quit       - Exit\n")
+        print("  1: <text>     - Send <text> to agent 1")
+        print("  1: t1 | t2    - Send t1 now, queue t2 for later")
+        print("  queue 1       - Show queue for agent 1")
+        print("  clear 1       - Clear queue for agent 1")
+        print("  auto 1        - Enable auto-continue for agent 1")
+        print("  stop 1        - Disable auto-continue for agent 1")
+        print("  reset 1       - Reset circuit breaker for agent 1")
+        print("  status        - Show agent status")
+        print("  quit          - Exit\n")
     elif command == "auto" and agent_id is not None:
         agent = config.agents.get(agent_id)
         if not agent:
@@ -647,6 +680,26 @@ def process_line(line: str, config: Config) -> bool:
             agent.last_snapshot = None
             print(f"{agent.name}: circuit RESET")
             save_state(config)
+    elif command == "queue" and agent_id is not None:
+        agent = config.agents.get(agent_id)
+        if not agent:
+            print(f"Unknown agent: {agent_id}")
+        elif not agent.task_queue:
+            print(f"{agent.name}: queue is empty")
+        else:
+            print(f"\n{agent.name} queue ({len(agent.task_queue)} tasks):")
+            for i, task in enumerate(agent.task_queue, 1):
+                print(f"  {i}. {task[:60]}{'...' if len(task) > 60 else ''}")
+            print()
+    elif command == "clear" and agent_id is not None:
+        agent = config.agents.get(agent_id)
+        if not agent:
+            print(f"Unknown agent: {agent_id}")
+        else:
+            cleared = len(agent.task_queue)
+            agent.task_queue.clear()
+            print(f"{agent.name}: cleared {cleared} queued tasks")
+            save_state(config)
     elif agent_id is not None and command:
         agent = config.agents.get(agent_id)
         if not agent:
@@ -656,12 +709,26 @@ def process_line(line: str, config: Config) -> bool:
         elif tmux_pane_in_copy_mode(agent.pane_id):
             print(f"{agent.name}: in scroll mode, exit first (q)")
         else:
+            # Split pipe-separated tasks
+            tasks = [t.strip() for t in command.split("|") if t.strip()]
+            if not tasks:
+                print(f"No valid tasks in command")
+                return True
+            first_task = tasks[0]
+            remaining = tasks[1:]
+
             if agent.worktree:
                 agent.last_snapshot = take_snapshot(agent.worktree)
-            if tmux_send(agent.pane_id, command):
-                print(f"-> {agent.name}: {command[:50]}...")
+            if tmux_send(agent.pane_id, first_task):
+                print(f"-> {agent.name}: {first_task[:50]}...")
                 agent.state = "working"
-                write_current_task(agent, command)
+                write_current_task(agent, first_task)
+
+                # Queue remaining tasks
+                if remaining:
+                    agent.task_queue.extend(remaining)
+                    print(f"   [{len(remaining)} tasks queued]")
+                    save_state(config)
             else:
                 print(f"Failed to send to {agent.name}")
     elif line.strip():

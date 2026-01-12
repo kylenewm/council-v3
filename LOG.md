@@ -289,3 +289,144 @@ Boris's key insight:
 **Commit:** `c045cd8 Add dispatcher test suite (57 tests)`
 
 ---
+
+### Ralph-Loop Plugin Installed (2026-01-12)
+
+**Task:** Install ralph-wiggum plugin per spec.
+
+**Finding:** Plugin is actually called `ralph-loop`, not `ralph-wiggum`.
+
+```bash
+claude plugin install ralph-loop
+```
+
+**How ralph-loop works:**
+- Registers Stop hook to intercept session end
+- Tracks iterations via state file
+- Prompts for completion promise after N iterations
+- User confirms work is done or continues
+
+**Tested on sandbox/calculator.py:**
+- Added power() function with tests
+- All 18 tests pass
+- Completion promise output works
+
+---
+
+### Task Tracking for Rich Notifications (2026-01-12)
+
+**Request:** Write current task to `~/.council/current_task.txt` when routing commands.
+
+**Implementation in simple.py:**
+```python
+CURRENT_TASK_FILE = Path.home() / ".council" / "current_task.txt"
+
+def write_current_task(agent: Agent, task: str):
+    """Write current task to file for rich notifications."""
+    try:
+        CURRENT_TASK_FILE.parent.mkdir(parents=True, exist_ok=True)
+        content = f"{agent.name}: {task}\n"
+        CURRENT_TASK_FILE.write_text(content)
+    except Exception as e:
+        print(f"[WARN] Could not write current task: {e}")
+```
+
+Called after successful `tmux_send()` in `process_line()`.
+
+---
+
+### Deep Research Cross-Batch Dedup Fix (2026-01-12)
+
+**Project:** deep-research-v0
+
+**Problem:** LLM dedup processes in batches of 50. Cross-batch duplicates were never compared, causing duplicate facts to leak through.
+
+**Solution:** Added second pass using `deduplicate_extractions()` with 0.85 similarity threshold after LLM batch dedup.
+
+**Code (pipeline_v2.py:1362-1369):**
+```python
+if len(deduped) > 50:
+    cross_batch_deduped = deduplicate_extractions(deduped, similarity_threshold=0.85)
+    removed = len(deduped) - len(cross_batch_deduped)
+    if removed > 0:
+        progress("DEDUP", f"Cross-batch pass: {len(deduped)} → {len(cross_batch_deduped)} facts ({removed} cross-batch duplicates)")
+    deduped = cross_batch_deduped
+```
+
+**Results:** On autonomous agents query, caught 47 cross-batch duplicates (346 → 299 facts).
+
+---
+
+### Autonomous Overnight Agents Research (2026-01-12)
+
+**Project:** deep-research-v0
+
+**Query:** How to run autonomous Claude Code agents overnight without human intervention
+
+**Results:** 160 sources → 370 extractions → 112 verified facts in 5 themes
+
+**Key Findings:**
+
+1. **Handling Clarification Questions**
+   - Auto-approve safe commands (grep, find, pytest) but NEVER git commit/push/rm
+   - Chain-of-Verification (CoVe): generate → question → fact-check → resolve
+   - Enable auto web search for docs/errors lookup
+
+2. **Preventing Stuck Agents**
+   - Set `maxTurns` property to prevent infinite loops
+   - Retry with exponential backoff + jitter
+   - Fail fast and escalate to human when anomalies exceed thresholds
+   - Use plan mode for complex tasks
+
+3. **Maintaining Context Overnight**
+   - Compaction: Summarize intermediate steps, reset with compressed summary
+   - Structured Memory: Store "working notes" externally (decisions, learnings, state)
+   - Use CLAUDE.md for project conventions so agents share standards
+   - Periodically prune context; prefer retrieval over raw logs
+
+4. **Circuit Breakers & Safety**
+   - Treat tool access like IAM: deny-all, allowlist only needed commands
+   - Know emergency stop shortcuts
+   - Instrument latencies, validate inputs/outputs
+   - 99.9% uptime needs retry logic, fallbacks, validation
+
+**Report saved:** `autonomous_agents_overnight_report.html`
+
+---
+
+### Task Queue System Implemented (2026-01-12)
+
+**Goal:** Send multiple tasks to execute sequentially when agents become ready.
+
+**Design decisions:**
+- Input format: Pipe-separated (`1: task1 | task2 | task3`)
+- Execution: Dequeue automatically when agent becomes ready
+- Priority: Queue > auto-continue (more specific intent wins)
+- Persistence: Saved to state.json across restarts
+- Circuit breaker respected (no dequeue if open)
+
+**New commands:**
+| Command | What |
+|---------|------|
+| `1: t1 \| t2` | Send t1 now, queue t2 |
+| `queue 1` | Show queued tasks |
+| `clear 1` | Clear queue |
+
+**Files modified:**
+- `council/dispatcher/simple.py` - Agent dataclass, state persistence, command parsing, execution logic
+- `tests/test_task_queue.py` - 27 new tests
+
+**Test count:** 84 total (57 original + 27 new)
+
+**Code changes:**
+1. Added `task_queue: list[str]` to Agent dataclass
+2. Updated `save_state()`/`load_state()` for persistence
+3. Added `queue`/`clear` patterns to `parse_command()`
+4. Modified `process_line()` to split pipes and queue remaining tasks
+5. Added dequeue logic to `check_agents()` before auto-continue
+6. Updated `show_status()` to display `Q:N` for queue depth
+7. Updated help text and docstring
+
+**Known limitation:** Shell pipes (`|`) in task content conflict with delimiter. Acceptable for voice input use case.
+
+---

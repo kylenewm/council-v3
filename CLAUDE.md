@@ -50,10 +50,13 @@ pytest tests/ -v
 | Command | What |
 |---------|------|
 | `1: <text>` | Send text to agent 1 |
+| `1: t1 \| t2` | Send t1 now, queue t2 for later |
+| `queue 1` | Show queue for agent 1 |
+| `clear 1` | Clear queue for agent 1 |
 | `auto 1` | Enable auto-continue for agent 1 |
 | `stop 1` | Disable auto-continue |
 | `reset 1` | Reset circuit breaker |
-| `status` | Show all agents |
+| `status` | Show all agents (includes Q:N for queue depth) |
 | `quit` | Exit |
 
 ---
@@ -70,6 +73,14 @@ pytest tests/ -v
 - Opens after 3 iterations without git progress
 - Reset with `reset N` command
 - Agents with open circuit don't auto-continue
+
+### Task Queue
+- Send multiple tasks: `1: task1 | task2 | task3`
+- First task sent immediately, rest queued
+- Dequeues automatically when agent becomes ready
+- Queue takes priority over auto-continue
+- Respects circuit breaker (no dequeue if open)
+- Persists to state.json across restarts
 
 ### Notifications
 - 30 second cooldown per agent
