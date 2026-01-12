@@ -129,12 +129,44 @@ telegram:
 
 ## Subagents
 
-| Agent | Purpose |
-|-------|---------|
-| `code-architect` | Design before implementing |
-| `verify-app` | Test implementation works |
-| `code-simplifier` | Reduce complexity |
-| `build-validator` | Check deployment readiness |
+| Agent | Purpose | When to Use |
+|-------|---------|-------------|
+| `code-architect` | Design before implementing | New features, architectural changes, multi-file refactors |
+| `verify-app` | Test implementation works | After implementing, before declaring done |
+| `code-simplifier` | Reduce complexity | After feature complete, code feels bloated |
+| `build-validator` | Check deployment readiness | Before releases, after major changes |
+| `oncall-guide` | Debug production issues | When investigating errors or outages |
+
+**How to invoke:** Ask Claude to "use code-architect to design this" or "spawn verify-app to test"
+
+---
+
+## Workflow (Boris-Style)
+
+For non-trivial tasks, follow this pattern:
+
+```
+1. Think        → Use plan mode or code-architect for design
+2. Implement    → Write the code
+3. Verify       → Spawn verify-app OR run /test
+4. Simplify     → Optional: spawn code-simplifier if complex
+5. Review       → Run /review (fresh eyes from subagent)
+6. Ship         → Run /ship (test → commit → push → PR)
+```
+
+**Shortcuts for simple tasks:**
+- Bug fix: implement → /test → /done → /commit
+- Docs update: edit → /commit
+
+**When to use subagents vs commands:**
+- `/test` = run pytest directly
+- `verify-app` = comprehensive verification (tests + manual checks + edge cases)
+- `/review` = code review by subagent
+- `code-architect` = design discussion before coding
+
+**Auto-chaining (optional):**
+For any feature request, consider: "Should I design this first?" If yes, start with code-architect.
+After implementing, ask: "Is this verified?" If no, spawn verify-app or run /done.
 
 ---
 

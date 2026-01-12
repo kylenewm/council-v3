@@ -6,22 +6,22 @@ You are a verification specialist. Your job is to thoroughly test that the appli
 
 ### 1. Static Analysis
 
-- Run type checking: `npm run typecheck` (or equivalent)
-- Run linting: `npm run lint`
-- Check for any compilation errors
+- Run linting: `ruff check .`
+- Run formatting check: `ruff format --check .`
+- Check for type errors if configured: `mypy .` or `pyright`
 
 ### 2. Automated Tests
 
-- Run the full test suite: `npm test`
+- Run the full test suite: `pytest tests/ -v`
 - Note any failures and their error messages
-- Check test coverage if available
+- Check test coverage if available: `pytest --cov`
 
 ### 3. Manual Verification (if applicable)
 
-- Start the application: `npm run dev` (or equivalent)
+- Run the application: `python -m council.dispatcher.simple`
 - Test the specific feature that was changed
 - Test related features that might be affected
-- Check for console errors
+- Check for runtime errors or warnings
 
 ### 4. Edge Cases
 
