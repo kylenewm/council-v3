@@ -36,6 +36,12 @@ def power(base, exponent):
     return _record("power", base, exponent, base ** exponent)
 
 
+def modulo(a, b):
+    if b == 0:
+        raise ValueError("Cannot modulo by zero")
+    return _record("modulo", a, b, a % b)
+
+
 def get_history():
     """Return copy of history (most recent last)."""
     return list(_history)

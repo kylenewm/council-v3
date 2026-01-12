@@ -1,5 +1,5 @@
 import pytest
-from calculator import add, subtract, multiply, divide, power, get_history, clear_history
+from calculator import add, subtract, multiply, divide, power, modulo, get_history, clear_history
 
 
 @pytest.fixture(autouse=True)
@@ -105,3 +105,12 @@ def test_divide_by_zero_not_recorded():
     with pytest.raises(ValueError):
         divide(1, 0)
     assert get_history() == []
+
+
+def test_modulo():
+    assert modulo(10, 3) == 1
+
+
+def test_modulo_by_zero():
+    with pytest.raises(ValueError):
+        modulo(10, 0)
