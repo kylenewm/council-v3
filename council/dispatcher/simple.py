@@ -496,7 +496,8 @@ def check_agents(config: Config) -> list[str]:
                         if has_progress(agent.last_snapshot, new_snapshot):
                             agent.no_progress_streak = 0
                             changes.append(f"  -> progress detected, streak reset")
-                        else:
+                        elif agent.circuit_state != "open":
+                            # Only increment streak if circuit not already open
                             agent.no_progress_streak += 1
                             changes.append(f"  -> no progress ({agent.no_progress_streak}/{MAX_NO_PROGRESS})")
                         agent.last_snapshot = new_snapshot
