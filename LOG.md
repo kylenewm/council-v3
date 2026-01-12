@@ -188,3 +188,68 @@ sandbox/
 - Auto-formatted by PostToolUse hook
 
 ---
+
+### Boris Setup Research Complete (2026-01-12)
+
+**Question:** Is council-v3's Boris setup actually the same as Boris's?
+
+**Finding:** The `0xquinto/bcherny-claude` repo we cloned is NOT Boris's actual config. It's a community interpretation based on his Twitter thread. Boris shared his workflow but **not his actual files**.
+
+**Research documented in:** `CLAUDE-RESEARCH.md`
+
+**Better alternatives found:**
+
+| Repo | Stars | Notable Features |
+|------|-------|------------------|
+| ChrisWiles/claude-code-showcase | 4.1k | Skills, JIRA/Linear, GitHub Actions, advanced hooks |
+| hesreallyhim/awesome-claude-code | 20k+ | 200+ resources, 60+ commands, workflow patterns |
+| centminmod/my-claude-code-setup | 1.6k | Memory bank system, 80% token reduction |
+
+**Council-v3 comparison:**
+
+| Component | Boris (Public) | Council-v3 | Gap? |
+|-----------|----------------|------------|------|
+| Agents | 5 described | 5 identical | No |
+| Commands | 5 described | 13 (superset) | No |
+| PostToolUse | Yes | Yes (black) | No |
+| Stop hook | Not in public repo | Yes | We have MORE |
+| MCP integrations | Slack, BigQuery, Sentry | None | **YES** |
+| Ralph-wiggum | Yes | Circuit breaker | Partial |
+| GitHub action | Yes | No | **YES** |
+
+**Conclusion:** Council-v3 has 80-90% of Boris's PUBLIC setup. The gaps are MCP integrations (if needed) and GitHub action (if team collaboration needed).
+
+Boris's key insight:
+> "People over-complicate it. Just give Claude a way to verify its work."
+
+---
+
+### Rich Notifications Complete (2026-01-12)
+
+**Implemented v1-agent1-notifications.md spec:**
+
+1. **Stop hook updated** (.claude/settings.json)
+   - Now calls `~/.council/scripts/rich-notify.sh`
+   - Sends Mac notification (terminal-notifier) + Pushover
+
+2. **Rich notification script** (~/.council/scripts/rich-notify.sh)
+   - Reads task from `~/.council/current_task.txt`
+   - Detects git state: READY TO COMMIT, CHANGES PENDING, JUST FINISHED, STOPPED
+   - Shows: project, status, task, files changed, next action
+   - Fixed time pattern bug (now matches 0-5 minutes, not just singular "minute ago")
+   - Priority=1 for READY TO COMMIT (Pushover high priority)
+
+3. **Tested end-to-end:**
+   - Made test commit (modulo function)
+   - Verified JUST FINISHED status with clean working tree
+   - Confirmed Pushover notification received with full context
+
+**Files changed:**
+- `.claude/settings.json` - Stop hook uses rich-notify.sh
+- `~/.council/scripts/rich-notify.sh` - Rich notification logic (outside repo)
+- `sandbox/calculator.py` - Added modulo() function
+- `sandbox/test_calculator.py` - Added modulo tests (18 total tests)
+
+**Pushed to GitHub:** https://github.com/kylenewm/council-v3.git
+
+---

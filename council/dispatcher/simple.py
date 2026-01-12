@@ -46,6 +46,7 @@ _command_queue: queue.Queue = queue.Queue()
 _state_lock = threading.Lock()
 
 STATE_FILE = Path.home() / ".council" / "state.json"
+CURRENT_TASK_FILE = Path.home() / ".council" / "current_task.txt"
 
 # Git progress detection
 from council.dispatcher.gitwatch import take_snapshot, has_progress, GitSnapshot
@@ -148,6 +149,16 @@ def load_state(config: Config):
             print(f"[STATE] Restored from {STATE_FILE}")
         except Exception as e:
             print(f"[WARN] Could not load state: {e}")
+
+
+def write_current_task(agent: Agent, task: str):
+    """Write current task to file for rich notifications."""
+    try:
+        CURRENT_TASK_FILE.parent.mkdir(parents=True, exist_ok=True)
+        content = f"{agent.name}: {task}\n"
+        CURRENT_TASK_FILE.write_text(content)
+    except Exception as e:
+        print(f"[WARN] Could not write current task: {e}")
 
 
 # --- Pattern Detection ---
@@ -649,6 +660,7 @@ def process_line(line: str, config: Config) -> bool:
             if tmux_send(agent.pane_id, command):
                 print(f"-> {agent.name}: {command[:50]}...")
                 agent.state = "working"
+                write_current_task(agent, command)
             else:
                 print(f"Failed to send to {agent.name}")
     elif line.strip():

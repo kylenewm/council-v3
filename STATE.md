@@ -1,11 +1,26 @@
 # STATE.md
 
-## Current Phase: Testing (2026-01-12)
+## Current Phase: Ready to Use (2026-01-12)
 
 Building council-v3 as hybrid of:
 1. **Dispatcher** (from council-v2) - FIFO, Pushover, Telegram, tmux routing
-2. **Boris Setup** (from bcherny-claude) - .claude/agents, commands, settings, CLAUDE.md
+2. **Boris Setup** (community interpretation) - .claude/agents, commands, settings, CLAUDE.md
 3. **Simplified guardrails** - circuit breaker (no-progress only), optional gitwatch
+
+## Research Complete
+
+See `CLAUDE-RESEARCH.md` for full analysis.
+
+**Key finding:** The bcherny-claude repo is a community interpretation, not Boris's actual files.
+
+**Council-v3 has 80-90% of Boris's PUBLIC setup:**
+- ✅ All 5 agents (identical structure)
+- ✅ 13 commands (superset of Boris's 5)
+- ✅ PostToolUse, Stop, Notification hooks
+- ❌ MCP integrations (Slack, BigQuery, Sentry)
+- ❌ GitHub action (@.claude on PRs)
+
+**Better repos exist** (claude-code-showcase has 4.1k stars) but council-v3's unique value is the dispatcher (voice, phone, multi-agent routing).
 
 ## Architecture
 
@@ -59,6 +74,27 @@ council-v3/
 - [x] Update config to 2 agents (Council + DeepResearch)
 - [x] Reset state.json for clean circuits
 - [x] Sandbox test Boris components - ALL PASSED
+- [x] Research Boris's actual setup vs community repos
+- [x] Document findings in CLAUDE-RESEARCH.md
+
+## Current Agent Tasks (2026-01-12)
+
+| Agent | Task | Status |
+|-------|------|--------|
+| Agent 1 (Notifications) | Rich notifications complete | Done |
+| Agent 2 (Ralph) | Ralph plugin + task tracking | Done |
+
+## v1 Features Complete
+
+- [x] Rich notifications (Stop hook + Pushover)
+- [x] Ralph plugin installed and documented
+- [x] power() function added to sandbox calculator
+- [x] modulo() function added to sandbox calculator
+- [x] CLAUDE-RESEARCH.md with Boris comparison
+- [x] QUIRKS.md with common issues
+- [x] Push to GitHub - all changes pushed to origin
+- [x] Notification system tested end-to-end (Mac + Pushover)
+- [x] Dispatcher writes current_task.txt for rich notifications
 
 ## How to Run
 
