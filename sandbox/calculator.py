@@ -32,6 +32,10 @@ def divide(a, b):
     return _record("divide", a, b, a / b)
 
 
+def power(base, exponent):
+    return _record("power", base, exponent, base ** exponent)
+
+
 def get_history():
     """Return copy of history (most recent last)."""
     return list(_history)

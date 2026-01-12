@@ -1,5 +1,5 @@
 import pytest
-from calculator import add, subtract, multiply, divide, get_history, clear_history
+from calculator import add, subtract, multiply, divide, power, get_history, clear_history
 
 
 @pytest.fixture(autouse=True)
@@ -28,6 +28,25 @@ def test_divide():
 def test_divide_by_zero():
     with pytest.raises(ValueError):
         divide(1, 0)
+
+
+def test_power():
+    assert power(2, 3) == 8
+
+
+def test_power_zero_exponent():
+    assert power(5, 0) == 1
+
+
+def test_power_negative_exponent():
+    assert power(2, -1) == 0.5
+
+
+def test_power_records_history():
+    power(2, 3)
+    history = get_history()
+    assert len(history) == 1
+    assert history[0] == {"operation": "power", "operands": (2, 3), "result": 8}
 
 
 def test_get_history_empty():
