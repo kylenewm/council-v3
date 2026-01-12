@@ -49,7 +49,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "LAST_COMMIT=$(git log -1 --pretty='%s' 2>/dev/null || echo 'No commits'); terminal-notifier -title 'Council: $(basename $(pwd))' -subtitle \"$LAST_COMMIT\" -message 'Agent finished' -sound default 2>/dev/null || true"
+            "command": "~/.council/scripts/rich-notify.sh"
           }
         ]
       }
