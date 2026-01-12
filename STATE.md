@@ -1,6 +1,6 @@
 # STATE.md
 
-## Current Phase: Initial Setup (2026-01-11)
+## Current Phase: Testing (2026-01-12)
 
 Building council-v3 as hybrid of:
 1. **Dispatcher** (from council-v2) - FIFO, Pushover, Telegram, tmux routing
@@ -53,7 +53,9 @@ council-v3/
 - [x] Simplify simple.py (1095 -> 875 lines)
 - [x] Add Stop hooks for notifications
 - [x] Create CLAUDE.md
-- [ ] Test with real agents
+- [x] Test with real agents - ALL 4 DETECTED, ROUTING WORKS
+- [x] Copy custom commands from council-v2
+- [x] Merge Boris + custom commands + Notification hook
 
 ## How to Run
 
