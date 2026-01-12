@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Council v3 - Input Channels</title>
+  <style>
+    :root {
+      --bg-dark: #0a0a0f;
+      --bg-card: #12141a;
+      --bg-inner: #1a1d24;
+      --purple: #8b5cf6;
+      --blue: #3b82f6;
+      --green: #10b981;
+      --amber: #f59e0b;
+      --cyan: #06b6d4;
+      --red: #ef4444;
+      --text: #e2e8f0;
+      --text-muted: #64748b;
+      --text-dim: #475569;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: var(--bg-dark);
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      color: var(--text);
+      padding: 30px;
+      min-height: 100vh;
+    }
+
+    .header {
+      text-align: center;
+      margin-bottom: 40px;
+    }
+
+    .back-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--text-muted);
+      text-decoration: none;
+      margin-bottom: 20px;
+    }
+
+    .back-link:hover { color: var(--text); }
+
+    h1 {
+      font-size: 28px;
+      font-weight: 700;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: var(--blue);
+    }
+
+    .subtitle {
+      color: var(--text-muted);
+      font-size: 13px;
+      margin-top: 10px;
+    }
+
+    .container {
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+
+    /* Channel grid */
+    .channels {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+      margin-bottom: 40px;
+    }
+
+    @media (max-width: 900px) {
+      .channels { grid-template-columns: 1fr; }
+    }
+
+    .channel {
+      background: var(--bg-card);
+      border-radius: 16px;
+      padding: 24px;
+      border: 1px solid #2a2d35;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .channel::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 4px;
+    }
+
+    .channel.voice::before { background: var(--cyan); }
+    .channel.phone::before { background: var(--amber); }
+    .channel.telegram::before { background: var(--blue); }
+
+    .channel-header {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 20px;
+    }
+
+    .channel-icon {
+      width: 48px;
+      height: 48px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+    }
+
+    .channel.voice .channel-icon { background: rgba(6, 182, 212, 0.2); }
+    .channel.phone .channel-icon { background: rgba(245, 158, 11, 0.2); }
+    .channel.telegram .channel-icon { background: rgba(59, 130, 246, 0.2); }
+
+    .channel-title {
+      font-size: 16px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .channel.voice .channel-title { color: var(--cyan); }
+    .channel.phone .channel-title { color: var(--amber); }
+    .channel.telegram .channel-title { color: var(--blue); }
+
+    .channel-desc {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    /* Flow steps */
+    .flow {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .flow-step {
+      background: var(--bg-inner);
+      border-radius: 8px;
+      padding: 12px;
+      border-left: 3px solid var(--text-dim);
+      position: relative;
+    }
+
+    .flow-step::after {
+      content: '↓';
+      position: absolute;
+      bottom: -18px;
+      left: 50%;
+      transform: translateX(-50%);
+      color: var(--text-dim);
+      font-size: 12px;
+    }
+
+    .flow-step:last-child::after { display: none; }
+
+    .flow-step.voice { border-left-color: var(--cyan); }
+    .flow-step.phone { border-left-color: var(--amber); }
+    .flow-step.telegram { border-left-color: var(--blue); }
+
+    .step-num {
+      font-size: 9px;
+      color: var(--text-dim);
+      margin-bottom: 4px;
+    }
+
+    .step-text {
+      font-size: 11px;
+      color: var(--text);
+    }
+
+    .step-detail {
+      font-size: 10px;
+      color: var(--text-dim);
+      margin-top: 4px;
+      font-family: monospace;
+    }
+
+    /* Config section */
+    .config {
+      background: #0d0f14;
+      border-radius: 8px;
+      padding: 12px;
+      margin-top: 16px;
+      font-size: 10px;
+    }
+
+    .config-title {
+      color: var(--text-dim);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 8px;
+    }
+
+    .config-code {
+      color: var(--text-muted);
+      font-family: monospace;
+      white-space: pre-wrap;
+    }
+
+    /* Dispatcher section */
+    .dispatcher {
+      background: var(--bg-card);
+      border-radius: 16px;
+      padding: 24px;
+      border: 1px solid #2a2d35;
+      margin-bottom: 30px;
+    }
+
+    .dispatcher-header {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+
+    .dispatcher-icon {
+      width: 48px;
+      height: 48px;
+      background: rgba(16, 185, 129, 0.2);
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+    }
+
+    .dispatcher-title {
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--green);
+      text-transform: uppercase;
+      letter-spacing: 2px;
+    }
+
+    .dispatcher-desc {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    /* Command parsing */
+    .parsing {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+
+    @media (max-width: 700px) {
+      .parsing { grid-template-columns: 1fr; }
+    }
+
+    .parse-section {
+      background: var(--bg-inner);
+      border-radius: 10px;
+      padding: 16px;
+    }
+
+    .parse-title {
+      font-size: 11px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 12px;
+    }
+
+    .parse-example {
+      background: #0d0f14;
+      border-radius: 6px;
+      padding: 10px 12px;
+      margin-bottom: 8px;
+      font-size: 12px;
+      font-family: monospace;
+    }
+
+    .parse-example .input {
+      color: var(--cyan);
+    }
+
+    .parse-example .output {
+      color: var(--green);
+      margin-top: 4px;
+    }
+
+    .parse-example .arrow {
+      color: var(--text-dim);
+    }
+
+    /* tmux routing */
+    .routing {
+      background: var(--bg-card);
+      border-radius: 16px;
+      padding: 24px;
+      border: 1px solid #2a2d35;
+    }
+
+    .routing-header {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--purple);
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .panes {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .pane {
+      background: var(--bg-inner);
+      border-radius: 10px;
+      padding: 14px 18px;
+      border: 1px solid #2a2d35;
+      min-width: 150px;
+    }
+
+    .pane-id {
+      font-size: 10px;
+      color: var(--text-dim);
+      margin-bottom: 4px;
+    }
+
+    .pane-name {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .pane-project {
+      font-size: 10px;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+
+    .pane.active {
+      border-color: var(--green);
+    }
+
+    .pane.active .pane-name {
+      color: var(--green);
+    }
+
+    /* Footer */
+    .footer {
+      text-align: center;
+      margin-top: 40px;
+      padding-top: 30px;
+      border-top: 1px solid #2a2d35;
+    }
+
+    .footer-links {
+      display: flex;
+      justify-content: center;
+      gap: 16px;
+    }
+
+    .footer-link {
+      font-size: 12px;
+      color: var(--text-muted);
+      text-decoration: none;
+      padding: 8px 16px;
+      background: var(--bg-card);
+      border-radius: 8px;
+      border: 1px solid #2a2d35;
+      transition: all 0.2s;
+    }
+
+    .footer-link:hover {
+      border-color: var(--blue);
+      color: var(--text);
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <a href="architecture.html" class="back-link">← Back to Overview</a>
+    <h1>Input Channels</h1>
+    <div class="subtitle">Voice, Phone, and Telegram command routing</div>
+  </div>
+
+  <div class="container">
+
+    <!-- Three channels -->
+    <div class="channels">
+
+      <!-- FIFO / Voice -->
+      <div class="channel voice">
+        <div class="channel-header">
+          <div class="channel-icon">🎤</div>
+          <div>
+            <div class="channel-title">FIFO (Voice)</div>
+            <div class="channel-desc">Named pipe for voice transcripts</div>
+          </div>
+        </div>
+
+        <div class="flow">
+          <div class="flow-step voice">
+            <div class="step-num">Step 1</div>
+            <div class="step-text">Speak command</div>
+            <div class="step-detail">"Agent 1 add zoom controls"</div>
+          </div>
+          <div class="flow-step voice">
+            <div class="step-num">Step 2</div>
+            <div class="step-text">Whispr Flow transcribes</div>
+            <div class="step-detail">Speech → Text</div>
+          </div>
+          <div class="flow-step voice">
+            <div class="step-num">Step 3</div>
+            <div class="step-text">Write to FIFO</div>
+            <div class="step-detail">~/.council/in.fifo</div>
+          </div>
+          <div class="flow-step voice">
+            <div class="step-num">Step 4</div>
+            <div class="step-text">Dispatcher reads</div>
+            <div class="step-detail">Non-blocking poll</div>
+          </div>
+        </div>
+
+        <div class="config">
+          <div class="config-title">Config</div>
+          <div class="config-code">fifo_path: ~/.council/in.fifo
+input_pane: "%2"</div>
+        </div>
+      </div>
+
+      <!-- Pushover / Phone -->
+      <div class="channel phone">
+        <div class="channel-header">
+          <div class="channel-icon">📱</div>
+          <div>
+            <div class="channel-title">Pushover</div>
+            <div class="channel-desc">Phone notifications & replies</div>
+          </div>
+        </div>
+
+        <div class="flow">
+          <div class="flow-step phone">
+            <div class="step-num">Step 1</div>
+            <div class="step-text">Receive notification</div>
+            <div class="step-detail">"Agent 1 ready"</div>
+          </div>
+          <div class="flow-step phone">
+            <div class="step-num">Step 2</div>
+            <div class="step-text">Reply with command</div>
+            <div class="step-detail">"1: continue"</div>
+          </div>
+          <div class="flow-step phone">
+            <div class="step-num">Step 3</div>
+            <div class="step-text">Open Client polls</div>
+            <div class="step-detail">Pushover API long-poll</div>
+          </div>
+          <div class="flow-step phone">
+            <div class="step-num">Step 4</div>
+            <div class="step-text">Dispatcher receives</div>
+            <div class="step-detail">Parse & route</div>
+          </div>
+        </div>
+
+        <div class="config">
+          <div class="config-title">Config</div>
+          <div class="config-code">pushover:
+  user_key: xxx
+  api_token: xxx</div>
+        </div>
+      </div>
+
+      <!-- Telegram -->
+      <div class="channel telegram">
+        <div class="channel-header">
+          <div class="channel-icon">💬</div>
+          <div>
+            <div class="channel-title">Telegram</div>
+            <div class="channel-desc">Bot commands via chat</div>
+          </div>
+        </div>
+
+        <div class="flow">
+          <div class="flow-step telegram">
+            <div class="step-num">Step 1</div>
+            <div class="step-text">Message bot</div>
+            <div class="step-detail">"status" or "1: task"</div>
+          </div>
+          <div class="flow-step telegram">
+            <div class="step-num">Step 2</div>
+            <div class="step-text">Bot long-polls</div>
+            <div class="step-detail">getUpdates API</div>
+          </div>
+          <div class="flow-step telegram">
+            <div class="step-num">Step 3</div>
+            <div class="step-text">Verify user ID</div>
+            <div class="step-detail">Allowlist check</div>
+          </div>
+          <div class="flow-step telegram">
+            <div class="step-num">Step 4</div>
+            <div class="step-text">Route command</div>
+            <div class="step-detail">Reply with status</div>
+          </div>
+        </div>
+
+        <div class="config">
+          <div class="config-title">Config</div>
+          <div class="config-code">telegram:
+  bot_token: xxx
+  allowed_user_ids: [123]</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Dispatcher -->
+    <div class="dispatcher">
+      <div class="dispatcher-header">
+        <div class="dispatcher-icon">🔀</div>
+        <div>
+          <div class="dispatcher-title">Command Router</div>
+          <div class="dispatcher-desc">Parse commands and route to tmux panes</div>
+        </div>
+      </div>
+
+      <div class="parsing">
+        <div class="parse-section">
+          <div class="parse-title">Command Syntax</div>
+          <div class="parse-example">
+            <div class="input">1: fix the bug</div>
+            <div class="arrow">→</div>
+            <div class="output">agent=1, task="fix the bug"</div>
+          </div>
+          <div class="parse-example">
+            <div class="input">1: task1 | task2 | task3</div>
+            <div class="arrow">→</div>
+            <div class="output">send task1, queue [task2, task3]</div>
+          </div>
+          <div class="parse-example">
+            <div class="input">status</div>
+            <div class="arrow">→</div>
+            <div class="output">show all agent states</div>
+          </div>
+        </div>
+
+        <div class="parse-section">
+          <div class="parse-title">Meta Commands</div>
+          <div class="parse-example">
+            <div class="input">auto 1</div>
+            <div class="output">Enable auto-continue</div>
+          </div>
+          <div class="parse-example">
+            <div class="input">stop 1</div>
+            <div class="output">Disable auto-continue</div>
+          </div>
+          <div class="parse-example">
+            <div class="input">reset 1</div>
+            <div class="output">Reset circuit breaker</div>
+          </div>
+          <div class="parse-example">
+            <div class="input">queue 1</div>
+            <div class="output">Show task queue</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- tmux Routing -->
+    <div class="routing">
+      <div class="routing-header">
+        <span>🖥️</span>
+        tmux Pane Routing
+      </div>
+
+      <div class="panes">
+        <div class="pane active">
+          <div class="pane-id">%0</div>
+          <div class="pane-name">Agent 1</div>
+          <div class="pane-project">codeflow-viz</div>
+        </div>
+        <div class="pane">
+          <div class="pane-id">%2</div>
+          <div class="pane-name">Input</div>
+          <div class="pane-project">FIFO reader</div>
+        </div>
+        <div class="pane active">
+          <div class="pane-id">%3</div>
+          <div class="pane-name">Agent 2</div>
+          <div class="pane-project">deep-research-v0</div>
+        </div>
+      </div>
+
+      <div class="config" style="margin-top: 20px;">
+        <div class="config-title">tmux send-keys</div>
+        <div class="config-code">tmux send-keys -t %0 -l "fix the bug"
+tmux send-keys -t %0 Enter</div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="footer">
+    <div class="footer-links">
+      <a href="planning.html" class="footer-link">← Planning</a>
+      <a href="architecture.html" class="footer-link">Overview</a>
+      <a href="coordination.html" class="footer-link">Workflow Examples →</a>
+    </div>
+  </div>
+</body>
+</html>

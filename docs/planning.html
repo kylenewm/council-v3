@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Council v3 - LLM Council Planning</title>
+  <style>
+    :root {
+      --bg-dark: #0a0a0f;
+      --bg-card: #12141a;
+      --bg-inner: #1a1d24;
+      --purple: #8b5cf6;
+      --purple-dim: #6d48d9;
+      --blue: #3b82f6;
+      --green: #10b981;
+      --amber: #f59e0b;
+      --cyan: #06b6d4;
+      --text: #e2e8f0;
+      --text-muted: #64748b;
+      --text-dim: #475569;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: var(--bg-dark);
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      color: var(--text);
+      padding: 30px;
+      min-height: 100vh;
+    }
+
+    .header {
+      text-align: center;
+      margin-bottom: 40px;
+    }
+
+    .back-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--text-muted);
+      text-decoration: none;
+      margin-bottom: 20px;
+    }
+
+    .back-link:hover { color: var(--text); }
+
+    h1 {
+      font-size: 28px;
+      font-weight: 700;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: var(--purple);
+    }
+
+    .subtitle {
+      color: var(--text-muted);
+      font-size: 13px;
+      margin-top: 10px;
+    }
+
+    .container {
+      max-width: 1000px;
+      margin: 0 auto;
+    }
+
+    /* Phase cards */
+    .phase {
+      background: var(--bg-card);
+      border-radius: 16px;
+      padding: 24px;
+      margin-bottom: 24px;
+      border: 1px solid #2a2d35;
+      position: relative;
+    }
+
+    .phase::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 4px;
+      border-radius: 16px 0 0 16px;
+      background: var(--purple);
+    }
+
+    .phase-header {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+
+    .phase-number {
+      width: 40px;
+      height: 40px;
+      background: rgba(139, 92, 246, 0.2);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--purple);
+    }
+
+    .phase-title {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--purple);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .phase-desc {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .phase-badge {
+      margin-left: auto;
+      font-size: 10px;
+      padding: 4px 10px;
+      background: rgba(139, 92, 246, 0.15);
+      border-radius: 4px;
+      color: var(--purple);
+      text-transform: uppercase;
+    }
+
+    /* Model cards */
+    .models {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+
+    .model {
+      background: var(--bg-inner);
+      border-radius: 12px;
+      padding: 16px;
+      border: 1px solid #2a2d35;
+    }
+
+    .model-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .model-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+    }
+
+    .model.claude .model-icon { background: rgba(139, 92, 246, 0.2); }
+    .model.gpt .model-icon { background: rgba(16, 185, 129, 0.2); }
+    .model.chair .model-icon { background: rgba(245, 158, 11, 0.2); }
+
+    .model-name {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .model-id {
+      font-size: 10px;
+      color: var(--text-dim);
+    }
+
+    .model-content {
+      background: #0d0f14;
+      border-radius: 8px;
+      padding: 12px;
+      font-size: 11px;
+      color: var(--text-muted);
+      line-height: 1.5;
+      border-left: 2px solid var(--purple-dim);
+    }
+
+    .model-content .label {
+      font-size: 9px;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+
+    /* Prompts */
+    .prompts {
+      background: var(--bg-inner);
+      border-radius: 10px;
+      padding: 16px;
+      margin-top: 16px;
+    }
+
+    .prompt-title {
+      font-size: 11px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 10px;
+    }
+
+    .prompt-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .prompt-item {
+      font-size: 10px;
+      padding: 6px 10px;
+      background: rgba(139, 92, 246, 0.1);
+      border: 1px solid rgba(139, 92, 246, 0.2);
+      border-radius: 6px;
+      color: var(--text);
+    }
+
+    /* Output section */
+    .output {
+      background: var(--bg-inner);
+      border-radius: 12px;
+      padding: 20px;
+      border: 1px solid var(--amber);
+    }
+
+    .output-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .output-icon {
+      font-size: 24px;
+    }
+
+    .output-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--amber);
+    }
+
+    .output-files {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .output-file {
+      background: rgba(245, 158, 11, 0.1);
+      border: 1px solid rgba(245, 158, 11, 0.3);
+      border-radius: 8px;
+      padding: 12px 16px;
+    }
+
+    .output-file .name {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--amber);
+      margin-bottom: 4px;
+    }
+
+    .output-file .desc {
+      font-size: 10px;
+      color: var(--text-muted);
+    }
+
+    /* Flow arrows */
+    .flow-arrow {
+      display: flex;
+      justify-content: center;
+      padding: 16px 0;
+      color: var(--text-dim);
+      font-size: 24px;
+    }
+
+    /* Timing info */
+    .timing {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 10px;
+      color: var(--text-dim);
+      margin-top: 12px;
+    }
+
+    .timing-icon { font-size: 14px; }
+
+    /* Example section */
+    .example {
+      background: var(--bg-card);
+      border-radius: 16px;
+      padding: 24px;
+      margin-top: 30px;
+      border: 1px solid #2a2d35;
+    }
+
+    .example-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--cyan);
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .example-input {
+      background: var(--bg-inner);
+      border-radius: 8px;
+      padding: 14px;
+      margin-bottom: 16px;
+      border-left: 3px solid var(--cyan);
+    }
+
+    .example-label {
+      font-size: 9px;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+
+    .example-text {
+      font-size: 12px;
+      color: var(--text);
+    }
+
+    .example-output {
+      background: #0d0f14;
+      border-radius: 8px;
+      padding: 14px;
+      font-size: 11px;
+      color: var(--text-muted);
+      line-height: 1.6;
+      white-space: pre-wrap;
+    }
+
+    /* Footer */
+    .footer {
+      text-align: center;
+      margin-top: 40px;
+      padding-top: 30px;
+      border-top: 1px solid #2a2d35;
+    }
+
+    .footer-links {
+      display: flex;
+      justify-content: center;
+      gap: 16px;
+    }
+
+    .footer-link {
+      font-size: 12px;
+      color: var(--text-muted);
+      text-decoration: none;
+      padding: 8px 16px;
+      background: var(--bg-card);
+      border-radius: 8px;
+      border: 1px solid #2a2d35;
+      transition: all 0.2s;
+    }
+
+    .footer-link:hover {
+      border-color: var(--purple);
+      color: var(--text);
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <a href="architecture.html" class="back-link">← Back to Overview</a>
+    <h1>LLM Council Planning</h1>
+    <div class="subtitle">Multi-model draft/critique/synthesis via OpenRouter</div>
+  </div>
+
+  <div class="container">
+
+    <!-- PHASE 1: DRAFTS -->
+    <div class="phase">
+      <div class="phase-header">
+        <div class="phase-number">1</div>
+        <div>
+          <div class="phase-title">Draft Phase</div>
+          <div class="phase-desc">Multiple models generate independent proposals</div>
+        </div>
+        <div class="phase-badge">Parallel</div>
+      </div>
+
+      <div class="models">
+        <div class="model claude">
+          <div class="model-header">
+            <div class="model-icon">🟣</div>
+            <div>
+              <div class="model-name">Claude</div>
+              <div class="model-id">anthropic/claude-opus-4.5</div>
+            </div>
+          </div>
+          <div class="model-content">
+            <div class="label">Draft Output</div>
+            Proposes architecture with emphasis on simplicity, clear boundaries, and pragmatic tradeoffs. Focuses on MVP scope.
+          </div>
+        </div>
+
+        <div class="model gpt">
+          <div class="model-header">
+            <div class="model-icon">🟢</div>
+            <div>
+              <div class="model-name">GPT</div>
+              <div class="model-id">openai/gpt-5.2</div>
+            </div>
+          </div>
+          <div class="model-content">
+            <div class="label">Draft Output</div>
+            Proposes alternative approach with different tech choices. May emphasize scalability or different patterns.
+          </div>
+        </div>
+      </div>
+
+      <div class="prompts">
+        <div class="prompt-title">System Prompts Available</div>
+        <div class="prompt-list">
+          <span class="prompt-item">PLAN_SYSTEM_PROMPT</span>
+          <span class="prompt-item">DEBATE_SYSTEM_PROMPT</span>
+          <span class="prompt-item">REFINE_SYSTEM_PROMPT</span>
+        </div>
+      </div>
+
+      <div class="timing">
+        <span class="timing-icon">⏱️</span>
+        Timeout: 120s per draft • Runs in parallel via ThreadPoolExecutor
+      </div>
+    </div>
+
+    <div class="flow-arrow">↓</div>
+
+    <!-- PHASE 2: CRITIQUE -->
+    <div class="phase">
+      <div class="phase-header">
+        <div class="phase-number">2</div>
+        <div>
+          <div class="phase-title">Critique Phase</div>
+          <div class="phase-desc">All models review all drafts, identify gaps and risks</div>
+        </div>
+        <div class="phase-badge">Parallel</div>
+      </div>
+
+      <div class="models">
+        <div class="model claude">
+          <div class="model-header">
+            <div class="model-icon">🟣</div>
+            <div>
+              <div class="model-name">Claude Critique</div>
+              <div class="model-id">Reviews both drafts</div>
+            </div>
+          </div>
+          <div class="model-content">
+            <div class="label">Critique Output</div>
+            Identifies gaps in GPT's proposal. Points out risks. Suggests improvements to both approaches.
+          </div>
+        </div>
+
+        <div class="model gpt">
+          <div class="model-header">
+            <div class="model-icon">🟢</div>
+            <div>
+              <div class="model-name">GPT Critique</div>
+              <div class="model-id">Reviews both drafts</div>
+            </div>
+          </div>
+          <div class="model-content">
+            <div class="label">Critique Output</div>
+            Identifies gaps in Claude's proposal. Suggests alternative considerations. Highlights tradeoffs.
+          </div>
+        </div>
+      </div>
+
+      <div class="prompts">
+        <div class="prompt-title">Critique Prompt</div>
+        <div class="prompt-list">
+          <span class="prompt-item">CRITIQUE_SYSTEM_PROMPT</span>
+        </div>
+      </div>
+
+      <div class="timing">
+        <span class="timing-icon">⏱️</span>
+        Each model sees: Original prompt + All drafts formatted as markdown
+      </div>
+    </div>
+
+    <div class="flow-arrow">↓</div>
+
+    <!-- PHASE 3: SYNTHESIS -->
+    <div class="phase">
+      <div class="phase-header">
+        <div class="phase-number">3</div>
+        <div>
+          <div class="phase-title">Synthesis Phase</div>
+          <div class="phase-desc">Chair model merges drafts + critiques into final plan</div>
+        </div>
+        <div class="phase-badge">Sequential</div>
+      </div>
+
+      <div class="models" style="grid-template-columns: 1fr;">
+        <div class="model chair">
+          <div class="model-header">
+            <div class="model-icon">👑</div>
+            <div>
+              <div class="model-name">Chair (Claude)</div>
+              <div class="model-id">anthropic/claude-opus-4.5 • Final authority</div>
+            </div>
+          </div>
+          <div class="model-content">
+            <div class="label">Synthesis Input</div>
+            Receives: Original prompt + All drafts + All critiques
+            <br><br>
+            <div class="label">Synthesis Output</div>
+            Unified plan that incorporates the best elements from each draft, addresses critiques, and resolves conflicts.
+          </div>
+        </div>
+      </div>
+
+      <div class="prompts">
+        <div class="prompt-title">Chair Prompts by Mode</div>
+        <div class="prompt-list">
+          <span class="prompt-item">CHAIR_PLAN_PROMPT</span>
+          <span class="prompt-item">CHAIR_REFINE_PROMPT</span>
+        </div>
+      </div>
+
+      <div class="timing">
+        <span class="timing-icon">⏱️</span>
+        Timeout: 180s for synthesis • Higher limit for complex merging
+      </div>
+    </div>
+
+    <div class="flow-arrow">↓</div>
+
+    <!-- OUTPUT -->
+    <div class="output">
+      <div class="output-header">
+        <div class="output-icon">📄</div>
+        <div class="output-title">Final Output</div>
+      </div>
+      <div class="output-files">
+        <div class="output-file">
+          <div class="name">PLAN.md</div>
+          <div class="desc">Synthesized project plan with tech stack, features, first steps</div>
+        </div>
+        <div class="output-file">
+          <div class="name">DEBATE.md</div>
+          <div class="desc">Technical decision with pros/cons from each perspective</div>
+        </div>
+        <div class="output-file">
+          <div class="name">REFINED.md</div>
+          <div class="desc">Updated plan incorporating feedback</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- EXAMPLE -->
+    <div class="example">
+      <div class="example-title">
+        <span>💡</span>
+        Example: Plan Mode
+      </div>
+
+      <div class="example-input">
+        <div class="example-label">User Input</div>
+        <div class="example-text">"Build a CLI tool for managing tmux sessions with voice commands"</div>
+      </div>
+
+      <div class="example-output">
+# Council Output (Synthesized)
+
+## Overview
+Voice-controlled tmux session manager using named pipes for input.
+
+## Tech Stack
+- Python 3.9+ (Claude's pragmatism)
+- Named FIFO for voice input (GPT's simplicity suggestion)
+- subprocess for tmux (both agreed)
+
+## Key Decisions
+- No libtmux dependency (Claude critique: adds complexity)
+- YAML config (GPT critique: JSON too rigid)
+
+## First Steps
+1. Create FIFO reader
+2. Parse voice transcripts
+3. Map to tmux commands
+4. Test with mock input</div>
+    </div>
+
+  </div>
+
+  <div class="footer">
+    <div class="footer-links">
+      <a href="architecture.html" class="footer-link">← Architecture</a>
+      <a href="inputs.html" class="footer-link">Input Channels →</a>
+    </div>
+  </div>
+</body>
+</html>

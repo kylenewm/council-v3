@@ -1,0 +1,681 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Council v3 - Multi-Agent Workflow</title>
+  <style>
+    :root {
+      --bg-dark: #0a0a0f;
+      --bg-card: #12141a;
+      --bg-inner: #1a1d24;
+      --purple: #8b5cf6;
+      --blue: #3b82f6;
+      --green: #10b981;
+      --amber: #f59e0b;
+      --red: #ef4444;
+      --cyan: #06b6d4;
+      --text: #e2e8f0;
+      --text-muted: #64748b;
+      --text-dim: #475569;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: var(--bg-dark);
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      color: var(--text);
+      padding: 30px;
+      min-height: 100vh;
+    }
+
+    .header {
+      text-align: center;
+      margin-bottom: 40px;
+    }
+
+    h1 {
+      font-size: 28px;
+      font-weight: 600;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      background: linear-gradient(90deg, var(--purple), var(--blue), var(--green));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .subtitle {
+      color: var(--text-muted);
+      font-size: 13px;
+      margin-top: 10px;
+    }
+
+    .main-container {
+      display: flex;
+      gap: 30px;
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+
+    /* Session cards */
+    .session {
+      flex: 1;
+      background: var(--bg-card);
+      border-radius: 12px;
+      padding: 20px;
+      border: 1px solid #2a2d35;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .session::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+    }
+
+    .session.green::before { background: var(--green); }
+    .session.amber::before { background: var(--amber); }
+    .session.red::before { background: var(--red); }
+
+    .session-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+
+    .session-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+    }
+
+    .session.green .session-icon { background: rgba(16, 185, 129, 0.2); }
+    .session.amber .session-icon { background: rgba(245, 158, 11, 0.2); }
+    .session.red .session-icon { background: rgba(239, 68, 68, 0.2); }
+
+    .session-title {
+      font-size: 14px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .session.green .session-title { color: var(--green); }
+    .session.amber .session-title { color: var(--amber); }
+    .session.red .session-title { color: var(--red); }
+
+    .session-project {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    /* Flow steps */
+    .flow-step {
+      background: var(--bg-inner);
+      border-radius: 8px;
+      padding: 14px;
+      margin-bottom: 12px;
+      border-left: 3px solid transparent;
+      position: relative;
+    }
+
+    .flow-step.voice { border-left-color: var(--cyan); }
+    .flow-step.plan { border-left-color: var(--purple); }
+    .flow-step.work { border-left-color: var(--blue); }
+    .flow-step.notify { border-left-color: var(--amber); }
+
+    .flow-label {
+      font-size: 9px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--text-dim);
+      margin-bottom: 6px;
+    }
+
+    .flow-content {
+      font-size: 12px;
+      color: var(--text);
+    }
+
+    .flow-icon {
+      position: absolute;
+      right: 12px;
+      top: 12px;
+      font-size: 16px;
+      opacity: 0.5;
+    }
+
+    /* Mini execution graph */
+    .execution-graph {
+      background: #0d0f14;
+      border-radius: 8px;
+      padding: 16px;
+      margin: 12px 0;
+    }
+
+    .exec-title {
+      font-size: 10px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .exec-title::before {
+      content: '';
+      width: 6px;
+      height: 6px;
+      background: var(--green);
+      border-radius: 50%;
+      animation: pulse 1.5s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 0.4; }
+      50% { opacity: 1; }
+    }
+
+    .exec-flow {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .exec-node {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 12px;
+      background: var(--bg-inner);
+      border-radius: 6px;
+      font-size: 11px;
+      border: 1px solid #2a2d35;
+      transition: all 0.2s;
+    }
+
+    .exec-node:hover {
+      border-color: var(--blue);
+      background: #1a1f2a;
+    }
+
+    .exec-node .icon {
+      width: 24px;
+      height: 24px;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      flex-shrink: 0;
+    }
+
+    .exec-node.subagent .icon { background: rgba(139, 92, 246, 0.2); }
+    .exec-node.command .icon { background: rgba(59, 130, 246, 0.2); }
+    .exec-node.hook .icon { background: rgba(16, 185, 129, 0.2); }
+    .exec-node.output .icon { background: rgba(245, 158, 11, 0.2); }
+
+    .exec-node .label { color: var(--text); flex: 1; }
+    .exec-node .desc { color: var(--text-dim); font-size: 10px; }
+
+    .exec-arrow {
+      display: flex;
+      justify-content: center;
+      color: var(--text-dim);
+      font-size: 10px;
+    }
+
+    /* Notification bubble */
+    .notification {
+      background: linear-gradient(135deg, #1a2030, #0f1520);
+      border: 1px solid #2a3545;
+      border-radius: 10px;
+      padding: 14px;
+      margin-top: 12px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .notif-icon {
+      width: 36px;
+      height: 36px;
+      background: rgba(245, 158, 11, 0.15);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+    }
+
+    .notif-content {
+      flex: 1;
+    }
+
+    .notif-title {
+      font-size: 11px;
+      color: var(--amber);
+      font-weight: 600;
+    }
+
+    .notif-text {
+      font-size: 10px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    .notif-channels {
+      display: flex;
+      gap: 6px;
+    }
+
+    .notif-badge {
+      font-size: 9px;
+      padding: 3px 8px;
+      border-radius: 4px;
+      background: rgba(255,255,255,0.05);
+      color: var(--text-dim);
+    }
+
+    /* Time indicator */
+    .time-badge {
+      position: absolute;
+      top: 16px;
+      right: 16px;
+      font-size: 9px;
+      color: var(--text-dim);
+      background: rgba(0,0,0,0.3);
+      padding: 4px 8px;
+      border-radius: 4px;
+    }
+
+    /* Footer legend */
+    .footer {
+      margin-top: 40px;
+      text-align: center;
+    }
+
+    .legend {
+      display: flex;
+      justify-content: center;
+      gap: 24px;
+      flex-wrap: wrap;
+      margin-bottom: 20px;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .legend-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 3px;
+    }
+
+    .footer-note {
+      font-size: 10px;
+      color: var(--text-dim);
+      max-width: 600px;
+      margin: 0 auto;
+      line-height: 1.6;
+    }
+
+    /* Voice wave animation */
+    .voice-wave {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      margin-left: auto;
+    }
+
+    .voice-wave span {
+      width: 3px;
+      height: 12px;
+      background: var(--cyan);
+      border-radius: 2px;
+      animation: wave 0.8s ease-in-out infinite;
+    }
+
+    .voice-wave span:nth-child(2) { animation-delay: 0.1s; height: 18px; }
+    .voice-wave span:nth-child(3) { animation-delay: 0.2s; height: 10px; }
+    .voice-wave span:nth-child(4) { animation-delay: 0.3s; height: 16px; }
+
+    @keyframes wave {
+      0%, 100% { transform: scaleY(0.5); opacity: 0.5; }
+      50% { transform: scaleY(1); opacity: 1; }
+    }
+
+    /* Responsive */
+    @media (max-width: 1200px) {
+      .main-container { flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>Council v3 Workflow</h1>
+    <div class="subtitle">3 independent sessions showing voice → plan → work → notify cycle</div>
+  </div>
+
+  <div class="main-container">
+
+    <!-- SESSION 1: CodeflowViz -->
+    <div class="session green">
+      <div class="time-badge">Session 1 • 2h ago</div>
+
+      <div class="session-header">
+        <div class="session-icon">📊</div>
+        <div>
+          <div class="session-title">CodeflowViz</div>
+          <div class="session-project">~/Downloads/codeflow-viz</div>
+        </div>
+      </div>
+
+      <!-- Voice Input -->
+      <div class="flow-step voice">
+        <div class="flow-icon">🎤</div>
+        <div class="flow-label">Voice Command</div>
+        <div class="flow-content" style="display: flex; align-items: center;">
+          "Add interactive zoom to the graph view"
+          <div class="voice-wave">
+            <span></span><span></span><span></span><span></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Planning (optional) -->
+      <div class="flow-step plan">
+        <div class="flow-icon">🧠</div>
+        <div class="flow-label">LLM Council Plan</div>
+        <div class="flow-content">Claude + GPT → D3 zoom behavior + controls UI</div>
+      </div>
+
+      <!-- Execution Graph -->
+      <div class="execution-graph">
+        <div class="exec-title">Agent Execution</div>
+        <div class="exec-flow">
+          <div class="exec-node subagent">
+            <div class="icon">🏗️</div>
+            <div class="label">code-architect</div>
+            <div class="desc">design zoom system</div>
+          </div>
+          <div class="exec-arrow">↓</div>
+          <div class="exec-node command">
+            <div class="icon">⚡</div>
+            <div class="label">/test</div>
+            <div class="desc">vitest --watch</div>
+          </div>
+          <div class="exec-arrow">↓</div>
+          <div class="exec-node subagent">
+            <div class="icon">✓</div>
+            <div class="label">verify-app</div>
+            <div class="desc">test zoom + pan + fit</div>
+          </div>
+          <div class="exec-arrow">↓</div>
+          <div class="exec-node command">
+            <div class="icon">🚀</div>
+            <div class="label">/ship</div>
+            <div class="desc">test → commit → PR</div>
+          </div>
+          <div class="exec-arrow">↓</div>
+          <div class="exec-node hook">
+            <div class="icon">📝</div>
+            <div class="label">PostToolUse</div>
+            <div class="desc">prettier format</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Notification -->
+      <div class="notification">
+        <div class="notif-icon">🔔</div>
+        <div class="notif-content">
+          <div class="notif-title">Agent Ready</div>
+          <div class="notif-text">PR #47 created: "Add zoom controls to Graph view"</div>
+        </div>
+        <div class="notif-channels">
+          <span class="notif-badge">Mac</span>
+          <span class="notif-badge">Phone</span>
+        </div>
+      </div>
+
+      <!-- Output -->
+      <div class="flow-step output" style="border-left-color: var(--green); margin-top: 12px; margin-bottom: 0;">
+        <div class="flow-label">Output</div>
+        <div class="flow-content" style="font-size: 10px; color: var(--text-muted);">
+          ✓ 3 files changed &nbsp;•&nbsp; +142 -23 &nbsp;•&nbsp; PR merged
+        </div>
+      </div>
+    </div>
+
+    <!-- SESSION 2: DeepResearch -->
+    <div class="session amber">
+      <div class="time-badge">Session 2 • 45m ago</div>
+
+      <div class="session-header">
+        <div class="session-icon">🔬</div>
+        <div>
+          <div class="session-title">DeepResearch</div>
+          <div class="session-project">~/Downloads/deep-research-v0</div>
+        </div>
+      </div>
+
+      <!-- Voice Input -->
+      <div class="flow-step voice">
+        <div class="flow-icon">🎤</div>
+        <div class="flow-label">Voice Command</div>
+        <div class="flow-content" style="display: flex; align-items: center;">
+          "Fix the citation accuracy, it's below threshold"
+          <div class="voice-wave">
+            <span></span><span></span><span></span><span></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Direct task (no council) -->
+      <div class="flow-step work">
+        <div class="flow-icon">→</div>
+        <div class="flow-label">Direct Dispatch</div>
+        <div class="flow-content">Routed to Agent 2 via FIFO</div>
+      </div>
+
+      <!-- Execution Graph -->
+      <div class="execution-graph">
+        <div class="exec-title">Agent Execution</div>
+        <div class="exec-flow">
+          <div class="exec-node command">
+            <div class="icon">🔍</div>
+            <div class="label">/first-principles</div>
+            <div class="desc">analyze root cause</div>
+          </div>
+          <div class="exec-arrow">↓</div>
+          <div class="exec-node subagent">
+            <div class="icon">🔧</div>
+            <div class="label">oncall-guide</div>
+            <div class="desc">debug verification.py</div>
+          </div>
+          <div class="exec-arrow">↓</div>
+          <div class="exec-node command">
+            <div class="icon">⚡</div>
+            <div class="label">/test-and-fix</div>
+            <div class="desc">run eval, fix failures</div>
+          </div>
+          <div class="exec-arrow">↓</div>
+          <div class="exec-node command">
+            <div class="icon">✓</div>
+            <div class="label">/done</div>
+            <div class="desc">verify requirements</div>
+          </div>
+          <div class="exec-arrow">↓</div>
+          <div class="exec-node subagent">
+            <div class="icon">👀</div>
+            <div class="label">/review</div>
+            <div class="desc">fresh agent review</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Notification -->
+      <div class="notification">
+        <div class="notif-icon">📱</div>
+        <div class="notif-content">
+          <div class="notif-title">Task Complete</div>
+          <div class="notif-text">Citation accuracy: 4.8 → 5.2 (target: ≥4.0) ✓</div>
+        </div>
+        <div class="notif-channels">
+          <span class="notif-badge">Pushover</span>
+          <span class="notif-badge">Telegram</span>
+        </div>
+      </div>
+
+      <!-- Output -->
+      <div class="flow-step output" style="border-left-color: var(--amber); margin-top: 12px; margin-bottom: 0;">
+        <div class="flow-label">Output</div>
+        <div class="flow-content" style="font-size: 10px; color: var(--text-muted);">
+          ✓ STATE.md updated &nbsp;•&nbsp; LOG.md appended &nbsp;•&nbsp; eval passed
+        </div>
+      </div>
+    </div>
+
+    <!-- SESSION 3: Council-v3 -->
+    <div class="session red">
+      <div class="time-badge">Session 3 • Now</div>
+
+      <div class="session-header">
+        <div class="session-icon">⚙️</div>
+        <div>
+          <div class="session-title">Council-v3</div>
+          <div class="session-project">~/Downloads/council-v3</div>
+        </div>
+      </div>
+
+      <!-- Voice Input -->
+      <div class="flow-step voice">
+        <div class="flow-icon">🎤</div>
+        <div class="flow-label">Voice Command</div>
+        <div class="flow-content" style="display: flex; align-items: center;">
+          "Create architecture diagram for the docs"
+          <div class="voice-wave">
+            <span></span><span></span><span></span><span></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Planning -->
+      <div class="flow-step plan">
+        <div class="flow-icon">🧠</div>
+        <div class="flow-label">Plan Mode</div>
+        <div class="flow-content">SVG/HTML with 4-layer architecture</div>
+      </div>
+
+      <!-- Execution Graph -->
+      <div class="execution-graph">
+        <div class="exec-title">Agent Execution</div>
+        <div class="exec-flow">
+          <div class="exec-node command">
+            <div class="icon">📋</div>
+            <div class="label">EnterPlanMode</div>
+            <div class="desc">design approach</div>
+          </div>
+          <div class="exec-arrow">↓</div>
+          <div class="exec-node hook">
+            <div class="icon">🎨</div>
+            <div class="label">PostToolUse</div>
+            <div class="desc">black format .py</div>
+          </div>
+          <div class="exec-arrow">↓</div>
+          <div class="exec-node command">
+            <div class="icon">💾</div>
+            <div class="label">/save</div>
+            <div class="desc">STATE.md + LOG.md</div>
+          </div>
+          <div class="exec-arrow">↓</div>
+          <div class="exec-node subagent">
+            <div class="icon">🔄</div>
+            <div class="label">Ralph loop</div>
+            <div class="desc">auto-continue × 3</div>
+          </div>
+          <div class="exec-arrow">↓</div>
+          <div class="exec-node output">
+            <div class="icon">📊</div>
+            <div class="label">Output</div>
+            <div class="desc">architecture.html</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Notification -->
+      <div class="notification">
+        <div class="notif-icon">✨</div>
+        <div class="notif-content">
+          <div class="notif-title">Ready for Review</div>
+          <div class="notif-text">Architecture diagram created in docs/</div>
+        </div>
+        <div class="notif-channels">
+          <span class="notif-badge">Mac</span>
+          <span class="notif-badge">tmux</span>
+        </div>
+      </div>
+
+      <!-- Output -->
+      <div class="flow-step output" style="border-left-color: var(--red); margin-top: 12px; margin-bottom: 0;">
+        <div class="flow-label">Output</div>
+        <div class="flow-content" style="font-size: 10px; color: var(--text-muted);">
+          ✓ docs/architecture.html &nbsp;•&nbsp; docs/coordination.html
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="footer">
+    <div class="legend">
+      <div class="legend-item">
+        <div class="legend-dot" style="background: var(--cyan)"></div>
+        <span>Voice Input</span>
+      </div>
+      <div class="legend-item">
+        <div class="legend-dot" style="background: var(--purple)"></div>
+        <span>LLM Council / Plan</span>
+      </div>
+      <div class="legend-item">
+        <div class="legend-dot" style="background: var(--blue)"></div>
+        <span>Commands</span>
+      </div>
+      <div class="legend-item">
+        <div class="legend-dot" style="background: rgba(139, 92, 246, 0.5)"></div>
+        <span>Subagents</span>
+      </div>
+      <div class="legend-item">
+        <div class="legend-dot" style="background: var(--green)"></div>
+        <span>Hooks</span>
+      </div>
+      <div class="legend-item">
+        <div class="legend-dot" style="background: var(--amber)"></div>
+        <span>Notifications</span>
+      </div>
+    </div>
+    <div class="footer-note">
+      Each session is independent. Voice commands route through FIFO/Pushover/Telegram → Dispatcher → tmux pane.
+      Agents use subagents, commands, and hooks. Notifications flow back to Mac + Phone.
+    </div>
+  </div>
+</body>
+</html>
