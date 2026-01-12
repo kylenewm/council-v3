@@ -253,3 +253,39 @@ Boris's key insight:
 **Pushed to GitHub:** https://github.com/kylenewm/council-v3.git
 
 ---
+
+### Dispatcher Test Suite Added (2026-01-12)
+
+**Goal:** Build test coverage for 888-line dispatcher to enable safe refactoring.
+
+**Tests created (57 total):**
+
+| File | Tests | Coverage |
+|------|-------|----------|
+| test_state_detection.py | 10 | detect_state() patterns |
+| test_command_parsing.py | 18 | parse_command(), clean_text() |
+| test_circuit_breaker.py | 12 | State transitions, auto-continue |
+| test_tmux.py | 17 | capture, send, pane checks |
+
+**Key decisions:**
+- Mock subprocess for tmux calls (no real tmux needed)
+- Focus on pure functions first
+- Circuit breaker tests verify logic patterns (TODO: add integration with check_agents)
+- Removed unused mock_tmux_capture fixture
+
+**Review feedback:**
+- Subagent review noted circuit breaker tests don't call real `check_agents()`
+- Decision: Ship with TODO, integration tests can come later
+- Current tests still catch regressions on core functions
+
+**Files created:**
+- `tests/conftest.py` - Fixtures
+- `tests/test_state_detection.py`
+- `tests/test_command_parsing.py`
+- `tests/test_circuit_breaker.py`
+- `tests/test_tmux.py`
+- `REFLECTIONS.md` - Self-reflection log
+
+**Commit:** `c045cd8 Add dispatcher test suite (57 tests)`
+
+---
