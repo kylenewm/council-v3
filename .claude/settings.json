@@ -49,7 +49,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "terminal-notifier -title 'Council v3' -message 'Agent finished in $(basename $(pwd))' -sound default 2>/dev/null || true"
+            "command": "LAST_COMMIT=$(git log -1 --pretty='%s' 2>/dev/null || echo 'No commits'); terminal-notifier -title 'Council: $(basename $(pwd))' -subtitle \"$LAST_COMMIT\" -message 'Agent finished' -sound default 2>/dev/null || true"
           }
         ]
       }
