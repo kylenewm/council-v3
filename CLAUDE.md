@@ -191,25 +191,16 @@ After implementing, ask: "Is this verified?" If no, spawn verify-app or run /don
 
 ---
 
-## Post-Task Reflection
+## Post-Task Reflection (This Project Only)
 
-**After completing a task, before running /ship, reflect in REFLECTIONS.md:**
+**Council-v3 is the meta project** - it defines the tooling other projects use. Reflections here improve the setup for all projects.
 
-Ask yourself:
+After completing work on council-v3, optionally note friction in REFLECTIONS.md:
 - What was harder than expected?
-- What context was missing or unclear?
-- What tools/commands didn't work well?
-- What would have made this easier?
+- What tooling/commands didn't work well?
+- What would make this easier?
 
-**Append to REFLECTIONS.md** with format:
-```markdown
-## [Date] [Task Summary]
-**What worked:**
-**What was hard:**
-**What would help next time:**
-```
-
-This captures friction without interrupting flow. Do it once at the end, not during work.
+**Don't copy REFLECTIONS.md to other projects** - it's only for improving council-v3 itself.
 
 ---
 
