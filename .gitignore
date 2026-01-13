@@ -28,3 +28,12 @@ Thumbs.db
 
 # Local config (don't commit secrets)
 .claude/settings.local.json
+
+# Personal/working docs
+CLAUDE-RESEARCH.md
+REFLECTIONS.md
+LOG.md
+STATE.md
+QUIRKS.md
+specs/
+sandbox/
