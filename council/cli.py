@@ -1,11 +1,16 @@
 """CLI interface for council."""
 
+import json
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
 import click
 
 from .council import run_council, DEFAULT_MODELS, DEFAULT_CHAIR
+
+# Log directory
+LOG_DIR = Path.home() / ".council" / "logs"
 
 
 @click.group()
@@ -245,6 +250,106 @@ def refine(instruction: str, plan: str, models: Optional[str], chair: Optional[s
     except Exception as e:
         click.echo(f"Error: {e}", err=True)
         raise SystemExit(1)
+
+
+@cli.command()
+@click.option(
+    "--tail", "-n",
+    default=20,
+    help="Show last N log entries (default: 20)"
+)
+@click.option(
+    "--errors", "-e",
+    is_flag=True,
+    help="Show only entries with errors"
+)
+@click.option(
+    "--date", "-d",
+    default=None,
+    help="Date to query (YYYY-MM-DD, default: today)"
+)
+@click.option(
+    "--agent", "-a",
+    default=None,
+    type=int,
+    help="Filter by agent ID"
+)
+def logs(tail: int, errors: bool, date: Optional[str], agent: Optional[int]):
+    """View dispatcher logs.
+
+    Examples:
+        council logs                    # Last 20 entries from today
+        council logs --tail 50          # Last 50 entries
+        council logs --errors           # Only errors
+        council logs --agent 1          # Only agent 1
+        council logs --date 2026-01-12  # Specific date
+    """
+    # Determine log file
+    if date:
+        log_date = date
+    else:
+        log_date = datetime.now().strftime("%Y-%m-%d")
+
+    log_file = LOG_DIR / f"{log_date}.jsonl"
+
+    if not log_file.exists():
+        click.echo(f"No logs found for {log_date}")
+        click.echo(f"Log directory: {LOG_DIR}")
+        return
+
+    # Read and parse entries
+    entries = []
+    with open(log_file) as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                entry = json.loads(line)
+                # Apply filters
+                if errors and not entry.get("error"):
+                    continue
+                if agent is not None and entry.get("agent_id") != agent:
+                    continue
+                entries.append(entry)
+            except json.JSONDecodeError:
+                continue
+
+    # Get last N entries
+    entries = entries[-tail:]
+
+    if not entries:
+        click.echo(f"No matching entries in {log_file.name}")
+        return
+
+    # Format output
+    click.echo(f"=== Logs: {log_file.name} ({len(entries)} entries) ===\n")
+
+    for entry in entries:
+        ts = entry.get("ts", "?")[:19]  # Trim to seconds
+        agent_id = entry.get("agent_id", "?")
+        cmd_type = entry.get("cmd_type", "?")
+        result = entry.get("result", "?")
+        error = entry.get("error")
+        pane_id = entry.get("pane_id", "")
+
+        # Color-code result
+        if result == "ok":
+            result_str = click.style(result, fg="green")
+        elif result == "fail":
+            result_str = click.style(result, fg="red")
+        elif result == "dry_run":
+            result_str = click.style(result, fg="yellow")
+        else:
+            result_str = result
+
+        line = f"{ts} | agent:{agent_id} | {cmd_type:15} | {result_str}"
+        if pane_id:
+            line += f" | {pane_id}"
+        if error:
+            line += f" | {click.style(error, fg='red')}"
+
+        click.echo(line)
 
 
 if __name__ == "__main__":

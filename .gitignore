@@ -37,3 +37,4 @@ STATE.md
 QUIRKS.md
 specs/
 sandbox/
+*.local.json

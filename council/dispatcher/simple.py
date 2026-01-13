@@ -36,7 +36,9 @@ import sys
 import threading
 import time
 import unicodedata
+import uuid
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
@@ -50,6 +52,47 @@ _state_lock = threading.Lock()
 
 STATE_FILE = Path.home() / ".council" / "state.json"
 CURRENT_TASK_FILE = Path.home() / ".council" / "current_task.txt"
+LOG_DIR = Path.home() / ".council" / "logs"
+
+# Run ID for this dispatcher session
+_run_id: str = str(uuid.uuid4())[:8]
+_log_lock = threading.Lock()
+
+
+def get_log_file() -> Path:
+    """Get today's log file path."""
+    return LOG_DIR / f"{datetime.now().strftime('%Y-%m-%d')}.jsonl"
+
+
+def log_event(
+    agent_id: Optional[int],
+    cmd_type: str,
+    pane_id: Optional[str] = None,
+    result: str = "ok",
+    error: Optional[str] = None,
+    extra: Optional[dict] = None,
+) -> None:
+    """Log an event to the JSONL log file."""
+    entry = {
+        "ts": datetime.now().isoformat(),
+        "run_id": _run_id,
+        "agent_id": agent_id,
+        "cmd_type": cmd_type,
+        "pane_id": pane_id,
+        "result": result,
+        "error": error,
+    }
+    if extra:
+        entry.update(extra)
+
+    with _log_lock:
+        try:
+            LOG_DIR.mkdir(parents=True, exist_ok=True)
+            with open(get_log_file(), "a") as f:
+                f.write(json.dumps(entry) + "\n")
+        except Exception as e:
+            print(f"[LOG ERROR] {e}")
+
 
 # Git progress detection
 from council.dispatcher.gitwatch import take_snapshot, has_progress, GitSnapshot
@@ -104,6 +147,8 @@ class Config:
     # Telegram bot
     telegram_bot_token: Optional[str] = None
     telegram_allowed_user_ids: list[int] = field(default_factory=list)
+    # Runtime options
+    dry_run: bool = False
 
 
 @dataclass
@@ -252,6 +297,21 @@ def tmux_pane_in_copy_mode(pane_id: str) -> bool:
         return result.returncode == 0 and result.stdout.strip() == "1"
     except (subprocess.TimeoutExpired, FileNotFoundError):
         return False
+
+
+def send_to_agent(agent: Agent, text: str, config: Config, cmd_type: str = "send") -> bool:
+    """Send text to agent, respecting dry-run mode."""
+    if config.dry_run:
+        print(f"[DRY-RUN] Would send to {agent.name} ({agent.pane_id}): {text[:80]}{'...' if len(text) > 80 else ''}")
+        log_event(agent.id, cmd_type, agent.pane_id, result="dry_run")
+        return True
+    success = tmux_send(agent.pane_id, text)
+    log_event(
+        agent.id, cmd_type, agent.pane_id,
+        result="ok" if success else "fail",
+        error=None if success else "tmux_send failed",
+    )
+    return success
 
 
 # --- Notifications ---
@@ -424,6 +484,74 @@ def pushover_poll(client: PushoverClient, config: Config) -> list[str]:
     return commands
 
 
+# --- Config Validation ---
+
+class ConfigValidationError(Exception):
+    """Raised when config validation fails."""
+    pass
+
+
+def validate_config(config: Config) -> list[str]:
+    """
+    Validate configuration. Returns list of warnings.
+    Raises ConfigValidationError for fatal issues.
+
+    Conditional validation: only validate what's configured.
+    """
+    errors = []
+    warnings = []
+
+    # --- Agent validation (always) ---
+    for agent in config.agents.values():
+        # pane_id is always required
+        if not agent.pane_id:
+            errors.append(f"Agent {agent.id} ({agent.name}): missing pane_id")
+        elif not agent.pane_id.startswith("%"):
+            warnings.append(f"Agent {agent.id} ({agent.name}): pane_id '{agent.pane_id}' should start with '%' for stability")
+
+        # Check pane exists (warning only)
+        if agent.pane_id and not tmux_pane_exists(agent.pane_id):
+            warnings.append(f"Agent {agent.id} ({agent.name}): pane {agent.pane_id} not found")
+
+        # worktree only required if auto_enabled (circuit breaker needs git)
+        if agent.auto_enabled:
+            if not agent.worktree:
+                errors.append(f"Agent {agent.id} ({agent.name}): worktree required when auto_enabled")
+            elif not agent.worktree.exists():
+                errors.append(f"Agent {agent.id} ({agent.name}): worktree '{agent.worktree}' does not exist")
+        elif agent.worktree and not agent.worktree.exists():
+            # Worktree configured but doesn't exist - just warn
+            warnings.append(f"Agent {agent.id} ({agent.name}): worktree '{agent.worktree}' does not exist")
+
+    # --- Pushover outbound (if either configured) ---
+    if config.pushover_user_key or config.pushover_api_token:
+        if not config.pushover_user_key:
+            errors.append("Pushover: user_key required when api_token is set")
+        if not config.pushover_api_token:
+            errors.append("Pushover: api_token required when user_key is set")
+
+    # --- Pushover inbound/Open Client (if either configured) ---
+    if config.pushover_email or config.pushover_password:
+        if not config.pushover_email:
+            errors.append("Pushover Open Client: email required when password is set")
+        if not config.pushover_password:
+            errors.append("Pushover Open Client: password required when email is set")
+
+    # --- Telegram (if bot_token configured) ---
+    if config.telegram_bot_token:
+        if not config.telegram_allowed_user_ids:
+            warnings.append("Telegram: bot_token set but no allowed_user_ids - no users can send commands")
+
+    # --- FIFO (if configured) ---
+    if config.fifo_path and not config.fifo_path.exists():
+        warnings.append(f"FIFO not found: {config.fifo_path} (create with: mkfifo {config.fifo_path})")
+
+    if errors:
+        raise ConfigValidationError("\n".join(errors))
+
+    return warnings
+
+
 # --- Config Loading ---
 
 def load_config(path: Path) -> Config:
@@ -514,6 +642,8 @@ def check_agents(config: Config) -> list[str]:
                         if agent.circuit_state != "open":
                             agent.circuit_state = "open"
                             changes.append(f"  -> CIRCUIT OPEN (no progress)")
+                            log_event(agent.id, "circuit_open", agent.pane_id,
+                                      extra={"streak": agent.no_progress_streak})
                             notify(f"{agent.name}: circuit open - no progress", config)
                             save_state(config)
 
@@ -522,7 +652,7 @@ def check_agents(config: Config) -> list[str]:
                         next_task = agent.task_queue[0]  # Peek first
                         if agent.worktree:
                             agent.last_snapshot = take_snapshot(agent.worktree)
-                        if tmux_send(agent.pane_id, next_task):
+                        if send_to_agent(agent, next_task, config, cmd_type="dequeue"):
                             agent.task_queue.pop(0)  # Pop after successful send
                             changes.append(f"  -> queued task: {next_task[:40]}...")
                             changes.append(f"     [{len(agent.task_queue)} remaining]")
@@ -533,7 +663,7 @@ def check_agents(config: Config) -> list[str]:
                     elif agent.auto_enabled and agent.circuit_state == "closed":
                         if agent.worktree:
                             agent.last_snapshot = take_snapshot(agent.worktree)
-                        if tmux_send(agent.pane_id, "continue"):
+                        if send_to_agent(agent, "continue", config, cmd_type="auto_continue"):
                             changes.append(f"  -> auto-continue sent")
                             agent.state = "working"
                     elif not agent.auto_enabled and not agent.task_queue:
@@ -678,6 +808,7 @@ def process_line(line: str, config: Config) -> bool:
             agent.circuit_state = "closed"
             agent.no_progress_streak = 0
             agent.last_snapshot = None
+            log_event(agent.id, "circuit_reset", agent.pane_id)
             print(f"{agent.name}: circuit RESET")
             save_state(config)
     elif command == "queue" and agent_id is not None:
@@ -719,8 +850,9 @@ def process_line(line: str, config: Config) -> bool:
 
             if agent.worktree:
                 agent.last_snapshot = take_snapshot(agent.worktree)
-            if tmux_send(agent.pane_id, first_task):
-                print(f"-> {agent.name}: {first_task[:50]}...")
+            if send_to_agent(agent, first_task, config):
+                if not config.dry_run:
+                    print(f"-> {agent.name}: {first_task[:50]}...")
                 agent.state = "working"
                 write_current_task(agent, first_task)
 
@@ -879,10 +1011,22 @@ def kill_old_dispatchers():
         pass
 
 
+def parse_args() -> tuple[Path, bool]:
+    """Parse command line arguments. Returns (config_path, dry_run)."""
+    import argparse
+    parser = argparse.ArgumentParser(description="Council Dispatcher v3")
+    parser.add_argument("config", nargs="?", default=str(Path.home() / ".council" / "config.yaml"),
+                        help="Path to config file (default: ~/.council/config.yaml)")
+    parser.add_argument("--dry-run", action="store_true",
+                        help="Print what would be sent without executing")
+    args = parser.parse_args()
+    return Path(args.config), args.dry_run
+
+
 def main():
     kill_old_dispatchers()
 
-    config_path = Path(sys.argv[1]) if len(sys.argv) > 1 else Path.home() / ".council" / "config.yaml"
+    config_path, dry_run = parse_args()
 
     if not config_path.exists():
         print(f"Config not found: {config_path}")
@@ -903,18 +1047,37 @@ poll_interval: 2.0
         sys.exit(1)
 
     config = load_config(config_path)
+    config.dry_run = dry_run
+
+    # Validate config (fail fast on errors)
+    try:
+        warnings = validate_config(config)
+    except ConfigValidationError as e:
+        print(f"[CONFIG ERROR]\n{e}")
+        sys.exit(1)
+
     load_state(config)
 
-    print("=== Council Dispatcher v3 ===")
+    # Log startup
+    log_event(None, "startup", extra={
+        "agents": len(config.agents),
+        "dry_run": config.dry_run,
+        "config_path": str(config_path),
+    })
+
+    mode_str = " [DRY-RUN MODE]" if config.dry_run else ""
+    print(f"=== Council Dispatcher v3{mode_str} ===")
     print(f"Loaded {len(config.agents)} agents from {config_path}")
     print()
 
-    # Validate panes
+    # Show agents and any warnings
     for agent in config.agents.values():
-        if tmux_pane_exists(agent.pane_id):
-            print(f"  {agent.name}: {agent.pane_id}")
-        else:
-            print(f"  {agent.name}: {agent.pane_id} NOT FOUND")
+        status = "OK" if tmux_pane_exists(agent.pane_id) else "NOT FOUND"
+        print(f"  {agent.name}: {agent.pane_id} [{status}]")
+    if warnings:
+        print()
+        for w in warnings:
+            print(f"  [WARN] {w}")
     print()
 
     # Initialize Pushover
