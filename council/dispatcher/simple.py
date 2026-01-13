@@ -1070,9 +1070,14 @@ poll_interval: 2.0
     print(f"Loaded {len(config.agents)} agents from {config_path}")
     print()
 
-    # Show agents and any warnings
+    # Show agents and any warnings (smoke test)
     for agent in config.agents.values():
-        status = "OK" if tmux_pane_exists(agent.pane_id) else "NOT FOUND"
+        if not tmux_pane_exists(agent.pane_id):
+            status = "NOT FOUND"
+        elif tmux_pane_in_copy_mode(agent.pane_id):
+            status = "COPY MODE"
+        else:
+            status = "OK"
         print(f"  {agent.name}: {agent.pane_id} [{status}]")
     if warnings:
         print()

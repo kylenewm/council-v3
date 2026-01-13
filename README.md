@@ -97,8 +97,23 @@ python -m council.dispatcher.simple
 | `council/dispatcher/telegram.py` | Telegram bot |
 | `council/dispatcher/gitwatch.py` | Git progress detection |
 
+## Debugging
+
+Logs are written to `~/.council/logs/YYYY-MM-DD.jsonl`. Quick queries:
+
+```bash
+# Last 50 events
+tail -50 ~/.council/logs/$(date +%Y-%m-%d).jsonl | jq .
+
+# Errors only
+grep '"result":"error"' ~/.council/logs/*.jsonl | jq .
+
+# Events for agent 1
+grep '"agent_id":1' ~/.council/logs/$(date +%Y-%m-%d).jsonl | jq .
+```
+
 ## Testing
 
 ```bash
-pytest tests/ -v  # 84 tests
+pytest tests/ -v  # 114 tests
 ```

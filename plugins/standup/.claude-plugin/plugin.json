@@ -1,0 +1,7 @@
+{
+  "name": "standup",
+  "description": "Generate daily standup reports by reading git logs and STATE.md files from configured council agents",
+  "author": {
+    "name": "Kyle Newman"
+  }
+}

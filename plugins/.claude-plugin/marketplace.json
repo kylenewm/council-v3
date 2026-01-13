@@ -1,0 +1,32 @@
+{
+  "name": "council-v3-plugins",
+  "description": "Local plugins for Council v3",
+  "owner": {
+    "name": "council-v3",
+    "email": "noreply@council-v3.local"
+  },
+  "plugins": [
+    {
+      "name": "ralph-queue",
+      "description": "Task queue for Ralph Loop - queue multiple tasks and execute sequentially",
+      "version": "1.0.0",
+      "author": {
+        "name": "council-v3",
+        "email": "noreply@council-v3.local"
+      },
+      "source": "./ralph-queue",
+      "category": "productivity"
+    },
+    {
+      "name": "standup",
+      "description": "Standup report generator",
+      "version": "1.0.0",
+      "author": {
+        "name": "council-v3",
+        "email": "noreply@council-v3.local"
+      },
+      "source": "./standup",
+      "category": "productivity"
+    }
+  ]
+}
