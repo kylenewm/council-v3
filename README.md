@@ -8,7 +8,10 @@ Council v3 adds:
 - **Voice/phone input** — Send commands via Telegram, get notifications via Pushover
 - **Auto-continue** — Circuit breaker catches stuck loops, keeps work moving without babysitting
 
-https://github.com/user-attachments/assets/demo.mp4
+Visual Overview:
+
+https://github.com/user-attachments/assets/2b279dc6-2026-4c22-aab2-2c879b29f730
+
 
 ## Architecture
 
