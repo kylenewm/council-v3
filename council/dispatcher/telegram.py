@@ -17,6 +17,7 @@ import subprocess
 import sys
 import threading
 import time
+from pathlib import Path
 from typing import Callable, Optional
 
 
@@ -98,6 +99,14 @@ class TelegramBot:
             return
 
         self._last_chat_id = chat_id
+
+        # Persist chat_id for notification script to use
+        try:
+            chat_id_file = Path.home() / ".council" / "telegram_chat_id.txt"
+            chat_id_file.parent.mkdir(parents=True, exist_ok=True)
+            chat_id_file.write_text(str(chat_id))
+        except Exception:
+            pass  # Non-critical, don't log
 
         # Check authorization
         if user_id not in self.allowed_user_ids:

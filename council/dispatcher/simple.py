@@ -204,10 +204,26 @@ def load_state(config: Config):
 
 
 def write_current_task(agent: Agent, task: str):
-    """Write current task to file for rich notifications."""
+    """Write current task context for rich notifications.
+
+    Format is source-able bash for the notification script:
+        AGENT_ID=1
+        AGENT_NAME="AgentName"
+        PANE_ID="%0"
+        PROJECT="project-name"
+        TASK="task description"
+    """
     try:
         CURRENT_TASK_FILE.parent.mkdir(parents=True, exist_ok=True)
-        content = f"{agent.name}: {task}\n"
+        # Escape quotes in task for bash sourcing
+        safe_task = task[:100].replace('"', '\\"').replace('\n', ' ')
+        project = agent.worktree.name if agent.worktree else "unknown"
+        content = f'''AGENT_ID={agent.id}
+AGENT_NAME="{agent.name}"
+PANE_ID="{agent.pane_id}"
+PROJECT="{project}"
+TASK="{safe_task}"
+'''
         CURRENT_TASK_FILE.write_text(content)
     except Exception as e:
         print(f"[WARN] Could not write current task: {e}")
@@ -238,6 +254,22 @@ def detect_state(output: str) -> str:
         if pattern.search(output):
             return "ready"
     return "working"
+
+
+# Pattern to detect "thinking" with duration, e.g., "(27m 6s · thinking)"
+THINKING_PATTERN = re.compile(r"\((\d+)m\s*(?:\d+s)?\s*·\s*thinking\)")
+STUCK_THINKING_THRESHOLD = 600  # 10 minutes in seconds
+
+
+def detect_stuck_thinking(output: str) -> Optional[int]:
+    """Detect if Claude is stuck thinking. Returns duration in seconds, or None."""
+    if not output:
+        return None
+    match = THINKING_PATTERN.search(output)
+    if match:
+        minutes = int(match.group(1))
+        return minutes * 60
+    return None
 
 
 # --- tmux Functions ---
@@ -616,6 +648,13 @@ def check_agents(config: Config) -> list[str]:
                     agent.state = "missing"
                     changes.append(f"{agent.name}: pane not found")
                 continue
+
+            # Check for stuck thinking (notify has cooldown, won't spam)
+            thinking_duration = detect_stuck_thinking(output)
+            if thinking_duration and thinking_duration >= STUCK_THINKING_THRESHOLD:
+                minutes = thinking_duration // 60
+                changes.append(f"{agent.name}: stuck thinking ({minutes}m)")
+                notify(f"[{agent.id}] {agent.name} stuck thinking for {minutes}min", config)
 
             new_state = detect_state(output)
             if new_state != agent.state:
