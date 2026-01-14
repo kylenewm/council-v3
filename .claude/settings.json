@@ -1,4 +1,5 @@
 {
+  "agent": "strict",
   "permissions": {
     "allow": [
       "Bash(python*)",
@@ -32,6 +33,17 @@
     "deny": []
   },
   "hooks": {
+    "UserPromptSubmit": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/Users/kylenewman/.council/hooks/inject.sh"
+          }
+        ]
+      }
+    ],
     "PostToolUse": [
       {
         "matcher": "Write|Edit",
