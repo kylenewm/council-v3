@@ -31,6 +31,9 @@ Thumbs.db
 
 # Personal/working docs
 CLAUDE-RESEARCH.md
+
+# Large media files (hosted on GitHub assets instead)
+docs/demo.mp4
 REFLECTIONS.md
 LOG.md
 STATE.md
