@@ -15,6 +15,10 @@ ENV/
 .pytest_cache/
 .coverage
 htmlcov/
+tests/fixtures/repos/clean_diff/
+tests/fixtures/repos/forbidden_touched/
+tests/fixtures/repos/protected_touched/
+tests/fixtures/repos/mixed_violations/
 
 # IDE
 .idea/
