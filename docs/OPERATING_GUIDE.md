@@ -354,57 +354,179 @@ If auto-continue ON and queue empty → sends "continue"
 
 | Command | What It Does |
 |---------|--------------|
-| `/test` | Run pytest directly |
+| `/test` | Run tests (auto-detects pytest/jest/etc) |
+| `/test-cycle` | Generate + run tests progressively |
 | `/commit` | Stage and commit changes |
 | `/ship` | Test → commit → push → PR |
 | `/done` | Verify work before marking complete |
-| `/review` | Spawn review subagent |
-| `/inject <mode>` | Change injection mode |
+| `/review` | Code review (spawns review subagent) |
+| `/inject <mode>` | Change injection mode (strict/sandbox/plan/review) |
+| `/save` | Update STATE.md + LOG.md |
+| `/summarize` | AI-generated summary of changes |
+| `/setup` | Setup new project |
+
+---
+
+## Plugins
+
+### Ralph Loop (Official Plugin)
+
+Iterative agent loops - Claude keeps working until task complete.
+
+```bash
+/ralph-loop "Build REST API. Tests must pass. Output <promise>DONE</promise>" --max-iterations 20 --completion-promise "DONE"
+
+/cancel-ralph         # Stop the loop
+```
+
+**How it works:**
+1. You run `/ralph-loop` once with a prompt
+2. Claude works on task
+3. Stop hook intercepts exit, re-feeds same prompt
+4. Claude sees previous work in files, continues improving
+5. Loop until completion promise found or max iterations
+
+**Best for:** Well-defined tasks with clear success criteria (tests, linters).
+
+**Not for:** Tasks needing human judgment or unclear goals.
+
+### Ralph Queue (Council Plugin)
+
+Queue multiple Ralph tasks for sequential execution:
+
+```bash
+/ralph-queue "task 1" | "task 2" | "task 3" --max-iterations 20
+/ralph-queue-start     # Begin executing
+/ralph-queue-status    # Check progress
+/ralph-queue-clear     # Clear queue
+```
+
+Each task runs as full Ralph loop. When one completes, next auto-starts.
+
+**Files:**
+- `.claude/ralph-queue.local.json` - Queue state
+- `.claude/ralph-loop.local.md` - Current task
+
+### Standup (Council Plugin)
+
+Generate daily standup from all agents:
+
+```bash
+/standup
+```
+
+Aggregates:
+- Git activity (last 24h) from each agent's worktree
+- STATE.md contents
+- Blockers
+
+Output grouped by agent.
+
+---
+
+## LLM Council (Multi-Model Planning)
+
+Generate plans using multiple LLMs in parallel, then synthesize:
+
+```bash
+# Generate project plan
+council plan "build a REST API for todos"
+
+# Include context files
+council plan "add auth to my app" --context README.md,src/app.py
+
+# Get multi-model debate on decisions
+council debate "should we use PostgreSQL or MongoDB?"
+
+# Refine an existing plan
+council refine "add more detail to the testing section"
+
+# Bootstrap project files from plan
+council bootstrap PLAN.md
+
+# Query dispatcher logs
+council logs --agent 1 --since "2h"
+```
+
+**How it works:**
+1. **Draft phase** (parallel): 2 models generate independent plans
+2. **Critique phase** (parallel): 2 models critique all drafts
+3. **Synthesis**: Chair model combines into final PLAN.md
+
+**Default models** (via OpenRouter):
+- `anthropic/claude-opus-4.5` (drafting & chair)
+- `openai/gpt-5.2` (drafting & critique)
+
+**Output files:**
+- `PLAN.md` - Generated plan
+- `STATE.md`, `LOG.md`, `CLAUDE.md` - via `council bootstrap`
 
 ---
 
 ## Subagents
 
-Specialized agents for specific tasks:
+Agent definitions in `.claude/agents/` for specialized tasks:
 
-| Agent | Purpose | When to Use |
-|-------|---------|-------------|
-| `code-architect` | Design before implementing | New features, architectural changes |
-| `verify-app` | Test implementation works | After implementing, before done |
-| `code-simplifier` | Reduce complexity | After feature complete, feels bloated |
-| `build-validator` | Check deployment readiness | Before releases |
-| `oncall-guide` | Debug production issues | Investigating errors |
+| Agent | Purpose |
+|-------|---------|
+| `code-architect` | Design reviews, architecture decisions |
+| `verify-app` | Test implementation, edge cases |
+| `code-simplifier` | Reduce complexity, remove duplication |
+| `build-validator` | Deployment readiness checks |
+| `oncall-guide` | Debug production issues |
 
-**How to invoke:**
+**How to use:**
+```bash
+claude --agent code-architect
+# or
+> "use code-architect to review this design"
 ```
-> "use code-architect to design this"
-> "spawn verify-app to test the implementation"
-```
 
-**Subagents vs Commands:**
-- `/test` = run pytest directly (fast)
-- `verify-app` = comprehensive verification (tests + manual checks + edge cases)
-- `/review` = code review by subagent
-- `code-architect` = design discussion before coding
+These are prompt templates, not separate processes.
 
 ---
 
-## Boris-Style Workflow
+## Start/Stop Scripts
+
+Quick setup for 4-agent tmux layout:
+
+```bash
+# Start council session with 4 panes
+./scripts/start-council.sh
+
+# Creates:
+#   %0 → codeflow-viz
+#   %1 → council-v3
+#   %2 → deep-research-v0
+#   %3 → voice-agent-eval
+
+# Stop all agents
+./scripts/stop-council.sh
+```
+
+After starting:
+1. Attach: `tmux attach -t council`
+2. Update config pane IDs if needed
+3. Start dispatcher: `python -m council.dispatcher.simple`
+
+---
+
+## Recommended Workflow
 
 For non-trivial tasks:
 
 ```
-1. Think      → Use plan mode or code-architect
-2. Implement  → Write the code
-3. Verify     → Spawn verify-app OR run /test
-4. Simplify   → Optional: code-simplifier if complex
-5. Review     → Run /review (fresh eyes)
-6. Ship       → Run /ship (test → commit → push → PR)
+1. Plan      → /inject plan, design approach
+2. Implement → /inject strict, write code
+3. Test      → /test or /test-cycle
+4. Verify    → /done (checks requirements)
+5. Review    → /review (fresh eyes)
+6. Ship      → /ship (test → commit → push → PR)
 ```
 
-**Shortcuts for simple tasks:**
+**Shortcuts:**
 - Bug fix: implement → /test → /done → /commit
-- Docs update: edit → /commit
+- Docs: edit → /commit
 
 ---
 
@@ -545,13 +667,26 @@ This format is:
 
 ## Module Inventory
 
+**LLM Council (Multi-Model Planning):**
 | File | Lines | Purpose |
 |------|-------|---------|
-| `council/dispatcher/simple.py` | ~950 | Main dispatcher - routing, queue, circuit breaker |
-| `council/dispatcher/telegram.py` | ~230 | Telegram bot for voice/text commands |
-| `council/dispatcher/gitwatch.py` | ~120 | Git progress detection for circuit breaker |
-| `scripts/check_invariants.py` | ~260 | Deterministic path violation checker |
-| `scripts/audit_done.py` | ~260 | Transcript auditor for DONE_REPORT verification |
+| `council/council.py` | ~346 | Multi-model draft, critique, synthesis |
+| `council/client.py` | ~139 | OpenRouter API client with retry |
+| `council/cli.py` | ~251 | CLI commands (plan, debate, refine, bootstrap) |
+| `council/bootstrap.py` | ~314 | Generate project files from plan |
+
+**Dispatcher (Multi-Agent Routing):**
+| File | Lines | Purpose |
+|------|-------|---------|
+| `council/dispatcher/simple.py` | ~955 | Main dispatcher - routing, queue, circuit breaker |
+| `council/dispatcher/telegram.py` | ~229 | Telegram bot for voice/text commands |
+| `council/dispatcher/gitwatch.py` | ~120 | Git progress detection |
+
+**Enforcement:**
+| File | Lines | Purpose |
+|------|-------|---------|
+| `scripts/check_invariants.py` | ~260 | Path violation checker |
+| `scripts/audit_done.py` | ~260 | Transcript auditor |
 
 ---
 
@@ -575,34 +710,72 @@ mkdir -p ~/.council/hooks
 # 2. Create FIFO for voice input
 mkfifo ~/.council/in.fifo
 
-# 3. Copy hook scripts
-cp council-v3/examples/hooks/* ~/.council/hooks/
+# 3. Copy hook scripts from council-v3
+cp ~/Downloads/council-v3/examples/hooks/* ~/.council/hooks/ 2>/dev/null || \
+  echo "Copy hooks manually from council-v3 repo"
 chmod +x ~/.council/hooks/*.sh
 
 # 4. Set initial mode
 echo "strict" > ~/.council/current_inject.txt
 
-# 5. Register hooks in Claude settings
-# Edit ~/.claude/settings.json:
-{
-  "hooks": {
-    "UserPromptSubmit": [{
-      "matcher": ".*",
-      "hooks": [{"type": "command", "command": "~/.council/hooks/inject.sh"}]
-    }]
-  }
-}
+# 5. Register hooks in Claude settings (~/.claude/settings.json):
+# Add to "hooks" section:
+#   "UserPromptSubmit": [{
+#     "matcher": ".*",
+#     "hooks": [{"type": "command", "command": "~/.council/hooks/inject.sh"}]
+#   }]
 
-# 6. Create config
-cp ~/.council/config.example.yaml ~/.council/config.yaml
-# Edit with your agent pane IDs and API keys
+# 6. Install plugins
+# Ralph Loop: Enable "ralph-loop@claude-plugins-official" in settings.json
+# Ralph Queue: Already in council-v3/plugins/
 
-# 7. Start dispatcher
+# 7. Create config
+cp ~/Downloads/council-v3/config.example.yaml ~/.council/config.yaml
+# Edit with your agent pane IDs, Pushover/Telegram credentials
+
+# 8. Start council (creates tmux session with 4 panes)
+./scripts/start-council.sh
+tmux attach -t council
+
+# 9. Start dispatcher (in separate terminal)
 python -m council.dispatcher.simple
+```
 
-# 8. Start Claude in tmux panes
-tmux new-session
-# Create panes, run `claude` in each
+---
+
+## File Structure
+
+```
+~/.council/
+├── hooks/
+│   ├── inject.sh           # Router (runs on every prompt)
+│   ├── auto-inject.sh      # Global rules
+│   ├── strict.sh           # Production mode
+│   ├── sandbox.sh          # POC mode
+│   ├── plan.sh             # Planning mode
+│   └── review.sh           # Review mode
+├── current_inject.txt      # Current mode (strict/sandbox/plan/review/off)
+├── config.yaml             # Agent config, API keys
+├── state.json              # Queue/circuit state
+└── in.fifo                 # Voice input pipe
+
+~/.claude/
+├── settings.json           # Hooks, plugins registration
+├── commands/               # Slash commands (/test, /commit, etc.)
+├── plugins/                # Plugin cache
+└── projects/               # Session transcripts (JSONL)
+
+~/Downloads/council-v3/
+├── council/dispatcher/     # Dispatcher code
+├── plugins/                # Council plugins (ralph-queue, standup)
+├── scripts/
+│   ├── start-council.sh    # Start 4-agent tmux layout
+│   ├── stop-council.sh     # Stop all agents
+│   ├── check_invariants.py # Path violation checker
+│   └── audit_done.py       # Transcript auditor
+├── .council/
+│   └── invariants.yaml     # Project path protection
+└── docs/                   # Documentation
 ```
 
 ---
@@ -611,8 +784,8 @@ tmux new-session
 
 | File | Purpose |
 |------|---------|
-| `STATE.md` | Current work, decisions (update frequently) |
+| `STATE.md` | Current work, decisions (update via /save) |
 | `LOG.md` | History (append-only) |
-| `REFLECTIONS.md` | Self-reflection on friction (council-v3 only) |
 | `CLAUDE.md` | Project-specific instructions |
 | `.council/invariants.yaml` | Protected/forbidden paths |
+| `.claude/ralph-queue.local.json` | Queue state (gitignored) |
