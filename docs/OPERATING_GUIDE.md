@@ -4,6 +4,42 @@ Practical guide for running and using the council multi-agent system.
 
 ---
 
+## System Overview
+
+**What Council v3 does:**
+- Routes commands from voice (FIFO), phone (Pushover), Telegram to Claude Code agents in tmux panes
+- Auto-continues agents with circuit breaker (git-based progress detection)
+- Sends notifications (Mac + Pushover) when agents complete tasks
+- Injects context via hooks to control agent behavior (strict/sandbox/plan/review modes)
+- Enforces invariants and audits completion claims
+
+**What agents do themselves:**
+- Task management (TodoWrite tool)
+- Work verification
+- Deciding when they're done
+
+**Architecture:**
+```
+┌─────────────────────────────────────────────────────────┐
+│                      DISPATCHER                          │
+│  Reads: FIFO (voice), Telegram, Pushover                │
+│  Routes to: tmux panes running Claude Code              │
+├─────────────────────────────────────────────────────────┤
+│   ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌────────┐  │
+│   │ Agent 1  │  │ Agent 2  │  │ Agent 3  │  │ Agent 4│  │
+│   │ Project A│  │ Project B│  │ Project C│  │Proj D  │  │
+│   │ (tmux %0)│  │ (tmux %1)│  │ (tmux %3)│  │(tmux %4│  │
+│   └──────────┘  └──────────┘  └──────────┘  └────────┘  │
+│                                                          │
+│   Each agent has:                                        │
+│   - Own Claude Code session                              │
+│   - Hooks injecting context per prompt                   │
+│   - Circuit breaker (opens after 3 no-progress loops)   │
+└─────────────────────────────────────────────────────────┘
+```
+
+---
+
 ## Quick Reference
 
 ### Mode Commands
@@ -258,6 +294,118 @@ Opens after 3 iterations without git commits. Prevents infinite loops.
 reset 1    # Reset circuit breaker for agent 1
 ```
 
+### Input Sources
+
+| Source | Setup | Use Case |
+|--------|-------|----------|
+| FIFO | `mkfifo ~/.council/in.fifo` | Voice via Wispr Flow |
+| Telegram | Bot token + allowed_user_ids in config | Phone commands |
+| Pushover | user_key + api_token in config | Receive notifications |
+| Direct tmux | Manual `tmux send-keys` | Emergency intervention |
+
+**Voice setup (Wispr Flow):**
+```bash
+# Wispr outputs to file, watch and pipe to FIFO
+echo "1: build the feature" > ~/.council/in.fifo
+```
+
+**Telegram setup:**
+```yaml
+# In ~/.council/config.yaml
+telegram:
+  bot_token: "123456:ABC..."
+  allowed_user_ids: [your_telegram_id]
+```
+
+### Notifications
+
+Dispatcher sends notifications when agents complete:
+- Mac: via `terminal-notifier`
+- Phone: via Pushover API
+
+30-second cooldown per agent to prevent spam.
+
+```yaml
+# In ~/.council/config.yaml
+pushover:
+  user_key: "xxx"
+  api_token: "xxx"
+```
+
+### Execution Flow
+
+```
+Voice/Telegram → FIFO → Dispatcher parses "1: build feature"
+    ↓
+Dispatcher checks: Agent 1 ready? Circuit closed? Queue empty?
+    ↓
+Routes to tmux pane %0 → sends text + Enter
+    ↓
+Agent executes → completes → pane shows prompt
+    ↓
+Dispatcher detects ready → sends notification
+    ↓
+If auto-continue ON and queue empty → sends "continue"
+```
+
+---
+
+## Slash Commands
+
+| Command | What It Does |
+|---------|--------------|
+| `/test` | Run pytest directly |
+| `/commit` | Stage and commit changes |
+| `/ship` | Test → commit → push → PR |
+| `/done` | Verify work before marking complete |
+| `/review` | Spawn review subagent |
+| `/inject <mode>` | Change injection mode |
+
+---
+
+## Subagents
+
+Specialized agents for specific tasks:
+
+| Agent | Purpose | When to Use |
+|-------|---------|-------------|
+| `code-architect` | Design before implementing | New features, architectural changes |
+| `verify-app` | Test implementation works | After implementing, before done |
+| `code-simplifier` | Reduce complexity | After feature complete, feels bloated |
+| `build-validator` | Check deployment readiness | Before releases |
+| `oncall-guide` | Debug production issues | Investigating errors |
+
+**How to invoke:**
+```
+> "use code-architect to design this"
+> "spawn verify-app to test the implementation"
+```
+
+**Subagents vs Commands:**
+- `/test` = run pytest directly (fast)
+- `verify-app` = comprehensive verification (tests + manual checks + edge cases)
+- `/review` = code review by subagent
+- `code-architect` = design discussion before coding
+
+---
+
+## Boris-Style Workflow
+
+For non-trivial tasks:
+
+```
+1. Think      → Use plan mode or code-architect
+2. Implement  → Write the code
+3. Verify     → Spawn verify-app OR run /test
+4. Simplify   → Optional: code-simplifier if complex
+5. Review     → Run /review (fresh eyes)
+6. Ship       → Run /ship (test → commit → push → PR)
+```
+
+**Shortcuts for simple tasks:**
+- Bug fix: implement → /test → /done → /commit
+- Docs update: edit → /commit
+
 ---
 
 ## Workflow Examples
@@ -392,3 +540,79 @@ This format is:
 - Required in strict mode
 - Auditable via `audit_done.py`
 - Evidence-based (not narrative)
+
+---
+
+## Module Inventory
+
+| File | Lines | Purpose |
+|------|-------|---------|
+| `council/dispatcher/simple.py` | ~950 | Main dispatcher - routing, queue, circuit breaker |
+| `council/dispatcher/telegram.py` | ~230 | Telegram bot for voice/text commands |
+| `council/dispatcher/gitwatch.py` | ~120 | Git progress detection for circuit breaker |
+| `scripts/check_invariants.py` | ~260 | Deterministic path violation checker |
+| `scripts/audit_done.py` | ~260 | Transcript auditor for DONE_REPORT verification |
+
+---
+
+## tmux Invariants
+
+Rules the dispatcher follows for tmux:
+
+- **Always use stable pane IDs** (`%N`) not indexes - indexes shift when panes close
+- **Always use `send-keys -l`** for literal text - prevents escape sequence issues
+- **Always send Enter as separate call** - ensures reliable execution
+- **Never send to panes in copy mode** - commands get lost
+
+---
+
+## First-Time Setup
+
+```bash
+# 1. Create directories
+mkdir -p ~/.council/hooks
+
+# 2. Create FIFO for voice input
+mkfifo ~/.council/in.fifo
+
+# 3. Copy hook scripts
+cp council-v3/examples/hooks/* ~/.council/hooks/
+chmod +x ~/.council/hooks/*.sh
+
+# 4. Set initial mode
+echo "strict" > ~/.council/current_inject.txt
+
+# 5. Register hooks in Claude settings
+# Edit ~/.claude/settings.json:
+{
+  "hooks": {
+    "UserPromptSubmit": [{
+      "matcher": ".*",
+      "hooks": [{"type": "command", "command": "~/.council/hooks/inject.sh"}]
+    }]
+  }
+}
+
+# 6. Create config
+cp ~/.council/config.example.yaml ~/.council/config.yaml
+# Edit with your agent pane IDs and API keys
+
+# 7. Start dispatcher
+python -m council.dispatcher.simple
+
+# 8. Start Claude in tmux panes
+tmux new-session
+# Create panes, run `claude` in each
+```
+
+---
+
+## Context Files
+
+| File | Purpose |
+|------|---------|
+| `STATE.md` | Current work, decisions (update frequently) |
+| `LOG.md` | History (append-only) |
+| `REFLECTIONS.md` | Self-reflection on friction (council-v3 only) |
+| `CLAUDE.md` | Project-specific instructions |
+| `.council/invariants.yaml` | Protected/forbidden paths |
