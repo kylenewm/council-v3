@@ -92,9 +92,13 @@ pytest tests/ -v
 
 | File | Purpose |
 |------|---------|
-| `council/dispatcher/simple.py` | Main dispatcher (~650 lines) |
+| `council/dispatcher/simple.py` | Main dispatcher (~955 lines) |
 | `council/dispatcher/gitwatch.py` | Git progress detection |
 | `council/dispatcher/telegram.py` | Telegram bot (curl-based) |
+| `council/council.py` | LLM Council - multi-model planning |
+| `council/cli.py` | CLI: `council plan/debate/refine/bootstrap` |
+| `scripts/check_invariants.py` | Path violation checker |
+| `scripts/audit_done.py` | Transcript auditor |
 | `~/.council/config.yaml` | Runtime config |
 | `~/.council/state.json` | Persisted state |
 
@@ -132,52 +136,45 @@ telegram:
 
 | Command | What |
 |---------|------|
-| `/test` | Run pytest |
+| `/test` | Run tests (auto-detects framework) |
+| `/test-cycle` | Generate + run tests progressively |
 | `/commit` | Stage and commit changes |
 | `/ship` | Test, commit, push, PR |
 | `/done` | Verify before marking complete |
-| `/review` | Spawn review subagent |
+| `/review` | Code review (subagent) |
+| `/inject <mode>` | Set mode: strict/sandbox/plan/review |
+| `/save` | Update STATE.md + LOG.md |
 
 ## Subagents
 
-| Agent | Purpose | When to Use |
-|-------|---------|-------------|
-| `code-architect` | Design before implementing | New features, architectural changes, multi-file refactors |
-| `verify-app` | Test implementation works | After implementing, before declaring done |
-| `code-simplifier` | Reduce complexity | After feature complete, code feels bloated |
-| `build-validator` | Check deployment readiness | Before releases, after major changes |
-| `oncall-guide` | Debug production issues | When investigating errors or outages |
+Agent definitions in `.claude/agents/` (invoke via `claude --agent <name>`):
 
-**How to invoke:** Ask Claude to "use code-architect to design this" or "spawn verify-app to test"
+| Agent | Purpose |
+|-------|---------|
+| `code-architect` | Design reviews, architecture decisions |
+| `verify-app` | Test implementation, edge cases |
+| `code-simplifier` | Reduce complexity |
+| `build-validator` | Deployment readiness |
+| `oncall-guide` | Debug production issues |
 
 ---
 
-## Workflow (Boris-Style)
+## Workflow
 
-For non-trivial tasks, follow this pattern:
+For non-trivial tasks:
 
 ```
-1. Think        → Use plan mode or code-architect for design
-2. Implement    → Write the code
-3. Verify       → Spawn verify-app OR run /test
-4. Simplify     → Optional: spawn code-simplifier if complex
-5. Review       → Run /review (fresh eyes from subagent)
-6. Ship         → Run /ship (test → commit → push → PR)
+1. Plan      → /inject plan OR council plan "idea"
+2. Implement → /inject strict, write code
+3. Test      → /test or /test-cycle
+4. Verify    → /done (checks requirements)
+5. Review    → /review (fresh eyes)
+6. Ship      → /ship (test → commit → push → PR)
 ```
 
-**Shortcuts for simple tasks:**
+**Shortcuts:**
 - Bug fix: implement → /test → /done → /commit
-- Docs update: edit → /commit
-
-**When to use subagents vs commands:**
-- `/test` = run pytest directly
-- `verify-app` = comprehensive verification (tests + manual checks + edge cases)
-- `/review` = code review by subagent
-- `code-architect` = design discussion before coding
-
-**Auto-chaining (optional):**
-For any feature request, consider: "Should I design this first?" If yes, start with code-architect.
-After implementing, ask: "Is this verified?" If no, spawn verify-app or run /done.
+- Docs: edit → /commit
 
 ---
 
@@ -208,8 +205,7 @@ After completing work on council-v3, optionally note friction in REFLECTIONS.md:
 
 After completing current work, pick from this queue:
 
-1. **Task queue system** - Send multiple tasks, execute sequentially
-2. **Cross-agent visibility** - See what other agents produced
-3. **Refactor simple.py** - 650 lines is unwieldy, split into modules
-4. **Voice command parsing** - Better handling of complex multi-step voice input
-5. **Status dashboard** - Web or TUI view of all agent states
+1. **Cross-agent visibility** - See what other agents produced
+2. **Refactor simple.py** - 955 lines is unwieldy, split into modules
+3. **Voice command parsing** - Better handling of complex multi-step voice input
+4. **Status dashboard** - Web or TUI view of all agent states
