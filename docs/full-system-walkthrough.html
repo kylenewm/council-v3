@@ -1,0 +1,1709 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Council v3 - Full System Walkthrough</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0d1117;
+            color: #c9d1d9;
+            line-height: 1.7;
+        }
+        .hero {
+            background: linear-gradient(135deg, #161b22 0%, #0d1117 100%);
+            padding: 4rem 2rem;
+            text-align: center;
+            border-bottom: 1px solid #30363d;
+        }
+        .hero h1 {
+            font-size: 2.5rem;
+            color: #f0f6fc;
+            margin-bottom: 1rem;
+        }
+        .hero p { color: #8b949e; font-size: 1.2rem; }
+
+        .container { max-width: 1000px; margin: 0 auto; padding: 2rem; }
+
+        h2 {
+            color: #58a6ff;
+            margin: 3rem 0 1.5rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid #21262d;
+        }
+        h3 { color: #f0f6fc; margin: 1.5rem 0 1rem; }
+
+        .phase {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 12px;
+            margin: 2rem 0;
+            overflow: hidden;
+        }
+        .phase-header {
+            background: #21262d;
+            padding: 1rem 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+        .phase-number {
+            background: #58a6ff;
+            color: #0d1117;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+        }
+        .phase-title { font-size: 1.1rem; font-weight: 600; color: #f0f6fc; }
+        .phase-time { margin-left: auto; color: #8b949e; font-size: 0.85rem; }
+        .phase-content { padding: 1.5rem; }
+
+        .terminal {
+            background: #0d1117;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            padding: 1rem 1.25rem;
+            font-family: 'SF Mono', 'Consolas', monospace;
+            font-size: 0.9rem;
+            overflow-x: auto;
+            margin: 1rem 0;
+        }
+        .terminal pre { white-space: pre-wrap; }
+        .prompt { color: #8b949e; }
+        .cmd { color: #79c0ff; }
+        .out { color: #c9d1d9; }
+        .ok { color: #3fb950; }
+        .err { color: #f85149; }
+        .warn { color: #d29922; }
+        .dim { color: #484f58; }
+        .file { color: #d2a8ff; }
+
+        .diagram {
+            background: #1c2128;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin: 1.5rem 0;
+            font-family: 'SF Mono', monospace;
+            font-size: 0.85rem;
+            overflow-x: auto;
+        }
+
+        .info-box {
+            background: #1c2128;
+            border-left: 4px solid #58a6ff;
+            padding: 1rem 1.25rem;
+            margin: 1rem 0;
+            border-radius: 0 8px 8px 0;
+        }
+        .info-box.success { border-left-color: #3fb950; }
+        .info-box.warning { border-left-color: #d29922; }
+        .info-box.error { border-left-color: #f85149; }
+
+        .arrow {
+            text-align: center;
+            color: #30363d;
+            font-size: 1.5rem;
+            padding: 0.5rem;
+        }
+
+        .split {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+        }
+        @media (max-width: 768px) {
+            .split { grid-template-columns: 1fr; }
+        }
+
+        .agent-card {
+            background: #21262d;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            padding: 1rem;
+        }
+        .agent-name { color: #58a6ff; font-weight: 600; margin-bottom: 0.5rem; }
+        .agent-status { font-size: 0.9rem; }
+
+        .badge {
+            display: inline-block;
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+        .badge-ready { background: #238636; }
+        .badge-working { background: #1f6feb; }
+        .badge-done { background: #3fb950; color: #0d1117; }
+        .badge-queue { background: #6e7681; }
+
+        .timeline {
+            position: relative;
+            padding-left: 2rem;
+        }
+        .timeline::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background: #30363d;
+        }
+        .timeline-item {
+            position: relative;
+            padding-bottom: 1.5rem;
+        }
+        .timeline-item::before {
+            content: '';
+            position: absolute;
+            left: -2rem;
+            top: 0.5rem;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #30363d;
+            border: 2px solid #0d1117;
+        }
+        .timeline-item.active::before { background: #58a6ff; }
+        .timeline-item.success::before { background: #3fb950; }
+        .timeline-item.error::before { background: #f85149; }
+
+        .config-file {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        .config-header {
+            background: #21262d;
+            padding: 0.5rem 1rem;
+            font-size: 0.85rem;
+            color: #8b949e;
+            border-bottom: 1px solid #30363d;
+        }
+        .config-body {
+            padding: 1rem;
+            font-family: 'SF Mono', monospace;
+            font-size: 0.85rem;
+        }
+
+        .step-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1rem;
+            margin: 1rem 0;
+        }
+        .step-card {
+            background: #21262d;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            padding: 1.25rem;
+        }
+        .step-card h4 {
+            color: #58a6ff;
+            font-size: 0.9rem;
+            margin-bottom: 0.75rem;
+        }
+        .step-card p {
+            color: #8b949e;
+            font-size: 0.85rem;
+        }
+
+        footer {
+            text-align: center;
+            padding: 3rem 2rem;
+            border-top: 1px solid #21262d;
+            color: #484f58;
+            font-size: 0.85rem;
+        }
+    </style>
+</head>
+<body>
+
+<div class="hero">
+    <h1>Council v3: Complete System Walkthrough</h1>
+    <p>A real example: "Add rate limiting to the API" from voice command to verified completion</p>
+</div>
+
+<div class="container">
+
+<!-- OVERVIEW -->
+<h2>The Setup</h2>
+
+<p>You have 4 Claude Code agents running in tmux panes. Each is working on a different part of your codebase. You control them via voice (FIFO), phone (Pushover), or Telegram.</p>
+
+<div class="diagram">
+<pre>
+┌─────────────────────────────────────────────────────────────────────────┐
+│                           YOUR TERMINAL                                  │
+├─────────────────────────────────────────────────────────────────────────┤
+│  ┌─────────────────────┐  ┌─────────────────────┐                       │
+│  │ <span class="ok">Agent 1: API</span>        │  │ <span class="warn">Agent 2: Frontend</span>   │                       │
+│  │ pane_id: %0         │  │ pane_id: %1         │                       │
+│  │ mode: strict        │  │ mode: sandbox       │                       │
+│  │ auto_audit: true    │  │ auto_audit: false   │                       │
+│  └─────────────────────┘  └─────────────────────┘                       │
+│  ┌─────────────────────┐  ┌─────────────────────┐                       │
+│  │ <span class="file">Agent 3: Tests</span>      │  │ <span class="dim">Agent 4: Docs</span>        │                       │
+│  │ pane_id: %2         │  │ pane_id: %3         │                       │
+│  │ mode: strict        │  │ mode: default       │                       │
+│  │ auto_audit: true    │  │ auto_audit: false   │                       │
+│  └─────────────────────┘  └─────────────────────┘                       │
+├─────────────────────────────────────────────────────────────────────────┤
+│  ┌───────────────────────────────────────────────────────────────────┐  │
+│  │ <span class="cmd">Dispatcher</span> - python -m council.dispatcher.simple                  │  │
+│  │ council>                                                          │  │
+│  └───────────────────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────────────┘
+</pre>
+</div>
+
+<div class="config-file">
+    <div class="config-header">~/.council/config.yaml</div>
+    <div class="config-body">
+<pre><span class="dim"># Agent configuration</span>
+agents:
+  1:
+    pane_id: "<span class="ok">%0</span>"
+    name: "API"
+    worktree: ~/projects/myapp
+    <span class="cmd">mode: strict</span>                     <span class="dim"># DONE_REPORT required</span>
+    <span class="cmd">transcript_path</span>: ~/.claude/projects/.../api-session.jsonl
+    <span class="cmd">auto_audit: true</span>                 <span class="dim"># Verify claims automatically</span>
+    <span class="cmd">invariants_path</span>: ~/.council/invariants.yaml
+  2:
+    pane_id: "%1"
+    name: "Frontend"
+    worktree: ~/projects/myapp
+    mode: sandbox                    <span class="dim"># Fast iteration, no audit</span>
+  3:
+    pane_id: "%2"
+    name: "Tests"
+    worktree: ~/projects/myapp
+    mode: strict
+    transcript_path: ~/.claude/projects/.../test-session.jsonl
+    auto_audit: true
+  4:
+    pane_id: "%3"
+    name: "Docs"
+    worktree: ~/projects/myapp
+
+<span class="dim"># Input sources</span>
+fifo_path: ~/.council/in.fifo        <span class="dim"># Voice commands land here</span>
+
+<span class="dim"># Notifications</span>
+pushover:
+  user_key: "xxx"
+  api_token: "xxx"
+
+telegram:
+  bot_token: "xxx"
+  allowed_user_ids: [123456789]
+</pre>
+    </div>
+</div>
+
+<!-- PHASE 1: STARTUP -->
+<div class="phase">
+    <div class="phase-header">
+        <div class="phase-number">1</div>
+        <div class="phase-title">Dispatcher Startup</div>
+        <div class="phase-time">T+0s</div>
+    </div>
+    <div class="phase-content">
+        <p>You start the dispatcher. It loads config, restores state, and starts monitoring.</p>
+
+        <div class="terminal">
+<pre><span class="prompt">$</span> <span class="cmd">python -m council.dispatcher.simple</span>
+
+<span class="out">Council Dispatcher v3</span>
+<span class="out">─────────────────────</span>
+<span class="ok">✓</span> Loaded config: ~/.council/config.yaml
+<span class="ok">✓</span> Restored state: 4 agents
+<span class="ok">✓</span> FIFO listening: ~/.council/in.fifo
+<span class="ok">✓</span> Telegram bot started
+<span class="ok">✓</span> Pushover client connected
+
+<span class="out">Agents:</span>
+  <span class="ok">1</span> API       %0 <span class="ok">ready</span>  strict+audit
+  <span class="warn">2</span> Frontend  %1 <span class="ok">ready</span>  sandbox
+  <span class="file">3</span> Tests     %2 <span class="ok">ready</span>  strict+audit
+  <span class="dim">4</span> Docs      %3 <span class="ok">ready</span>  default
+
+<span class="prompt">council></span> <span class="dim">█</span></pre>
+        </div>
+
+        <div class="info-box">
+            <strong>What's happening:</strong>
+            <ul style="margin-top: 0.5rem; padding-left: 1.25rem; color: #8b949e;">
+                <li>Config loaded from YAML</li>
+                <li>Previous state restored (auto-continue settings, queued tasks)</li>
+                <li>Three input sources ready: FIFO, Telegram, Pushover</li>
+                <li>Agents in strict mode have transcript monitoring enabled</li>
+            </ul>
+        </div>
+    </div>
+</div>
+
+<!-- PHASE 2: VOICE COMMAND -->
+<div class="phase">
+    <div class="phase-header">
+        <div class="phase-number">2</div>
+        <div class="phase-title">Voice Command Arrives</div>
+        <div class="phase-time">T+30s</div>
+    </div>
+    <div class="phase-content">
+        <p>You speak into your mic: <em>"Agent one add rate limiting to the API endpoint"</em></p>
+        <p>Your voice-to-text system writes to the FIFO:</p>
+
+        <div class="terminal">
+<pre><span class="dim"># Voice recognition writes to FIFO</span>
+<span class="prompt">$</span> <span class="cmd">echo "1: Add rate limiting to the API endpoint" > ~/.council/in.fifo</span>
+
+<span class="dim"># Dispatcher picks it up immediately</span>
+<span class="prompt">council></span> <span class="out">[FIFO] 1: Add rate limiting to the API endpoint</span>
+<span class="out">Sending to Agent 1 (API)...</span>
+<span class="ok">✓ Sent</span></pre>
+        </div>
+
+        <div class="diagram">
+<pre>
+  Voice        FIFO             Dispatcher           tmux %0
+    │            │                  │                   │
+    │ "1: Add    │                  │                   │
+    │  rate..."  │                  │                   │
+    └───────────>│                  │                   │
+                 │  poll_interval   │                   │
+                 │  (2 seconds)     │                   │
+                 │<─────────────────│                   │
+                 │                  │                   │
+                 │  parse: agent=1  │                   │
+                 │  cmd="Add rate.."│                   │
+                 │                  │                   │
+                 │                  │ tmux send-keys -l │
+                 │                  │──────────────────>│
+                 │                  │                   │
+                 │                  │ tmux send-keys    │
+                 │                  │ Enter             │
+                 │                  │──────────────────>│
+                 │                  │                   │
+                 │                  │ <span class="ok">awaiting_done_report = true</span>
+</pre>
+        </div>
+
+        <div class="info-box">
+            <strong>Key behaviors:</strong>
+            <ul style="margin-top: 0.5rem; padding-left: 1.25rem; color: #8b949e;">
+                <li>FIFO is non-blocking - voice commands appear instantly</li>
+                <li><code>send-keys -l</code> sends text literally (special chars safe)</li>
+                <li>Enter sent separately (avoids escaping issues)</li>
+                <li>Agent 1 is in strict mode, so <code>awaiting_done_report = true</code></li>
+            </ul>
+        </div>
+    </div>
+</div>
+
+<!-- PHASE 3: QUEUE MULTIPLE TASKS -->
+<div class="phase">
+    <div class="phase-header">
+        <div class="phase-number">3</div>
+        <div class="phase-title">Queue Follow-up Tasks</div>
+        <div class="phase-time">T+35s</div>
+    </div>
+    <div class="phase-content">
+        <p>While Agent 1 works, you queue more tasks for when it's done:</p>
+
+        <div class="terminal">
+<pre><span class="prompt">council></span> <span class="cmd">queue 1 "Add tests for rate limiting"</span>
+<span class="out">Queued task for Agent 1 (queue depth: 1)</span>
+
+<span class="prompt">council></span> <span class="cmd">queue 1 "Update API docs with rate limit info"</span>
+<span class="out">Queued task for Agent 1 (queue depth: 2)</span>
+
+<span class="prompt">council></span> <span class="cmd">queue 1</span>
+<span class="out">Agent 1 (API) queue - 2 tasks:</span>
+<span class="out">  1. Add tests for rate limiting</span>
+<span class="out">  2. Update API docs with rate limit info</span></pre>
+        </div>
+
+        <div class="info-box">
+            <strong>Task Queue Rules:</strong>
+            <ul style="margin-top: 0.5rem; padding-left: 1.25rem; color: #8b949e;">
+                <li>Tasks queue while agent is working</li>
+                <li>Auto-dequeue when agent becomes ready</li>
+                <li>Queue takes priority over auto-continue</li>
+                <li>Queue respects circuit breaker (won't dequeue if open)</li>
+                <li>Persists across dispatcher restarts</li>
+            </ul>
+        </div>
+    </div>
+</div>
+
+<!-- PHASE 4: MONITORING -->
+<div class="phase">
+    <div class="phase-header">
+        <div class="phase-number">4</div>
+        <div class="phase-title">Dispatcher Monitors Agent</div>
+        <div class="phase-time">T+35s to T+5min</div>
+    </div>
+    <div class="phase-content">
+        <p>Every 2 seconds, the dispatcher checks agent state via tmux capture:</p>
+
+        <div class="terminal">
+<pre><span class="prompt">council></span> <span class="cmd">status</span>
+<span class="out">Agent 1 (API):      <span class="warn">working</span> [awaiting DONE_REPORT] Q:2</span>
+<span class="out">Agent 2 (Frontend): <span class="ok">ready</span></span>
+<span class="out">Agent 3 (Tests):    <span class="ok">ready</span></span>
+<span class="out">Agent 4 (Docs):     <span class="ok">ready</span></span>
+
+<span class="dim"># 2 minutes later...</span>
+<span class="prompt">council></span> <span class="cmd">status</span>
+<span class="out">Agent 1 (API):      <span class="warn">working</span> [awaiting DONE_REPORT] Q:2</span>
+<span class="dim">                    ↑ Still working, prompt not visible</span></pre>
+        </div>
+
+        <div class="diagram">
+<pre>
+<span class="dim">State Detection (every poll_interval):</span>
+
+┌─────────────────────────────────────────────────────────────┐
+│  tmux capture-pane -p -t %0 | tail -50                      │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  ... agent output ...                                       │
+│  ... more output ...                                        │
+│                                                             │
+│  <span class="ok">❯</span>                          ← Prompt visible = <span class="ok">ready</span>        │
+│                                                             │
+│  OR                                                         │
+│                                                             │
+│  ... agent output ...      ← No prompt = <span class="warn">working</span>            │
+│  <span class="cmd">Reading file...</span>                                           │
+│                                                             │
+│  OR                                                         │
+│                                                             │
+│  <span class="file">1. Yes</span>                     ← Numbered options = <span class="file">dialog</span>    │
+│  <span class="file">2. No</span>                                                      │
+│  <span class="file">3. Cancel</span>                                                  │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+</pre>
+        </div>
+    </div>
+</div>
+
+<!-- PHASE 5: AGENT COMPLETES -->
+<div class="phase">
+    <div class="phase-header">
+        <div class="phase-number">5</div>
+        <div class="phase-title">Agent Outputs DONE_REPORT</div>
+        <div class="phase-time">T+5min</div>
+    </div>
+    <div class="phase-content">
+        <p>Agent 1 finishes and outputs the required DONE_REPORT:</p>
+
+        <div class="terminal">
+<pre><span class="dim"># In Agent 1's tmux pane (what the agent outputs):</span>
+
+I've added rate limiting to the API endpoint.
+
+<span class="ok">DONE_REPORT:</span>
+- changed_files: [src/api/routes.py, src/api/middleware.py]
+- commands_run:
+  - pytest tests/test_api.py -v (exit 0)
+  - python -c "from src.api import app" (exit 0)
+- test_output: "12 passed in 2.34s"
+- invariants: "clean - no protected files modified"
+- next_actions: []
+
+<span class="ok">❯</span> <span class="dim">█</span></pre>
+        </div>
+
+        <p style="margin-top: 1rem;">This gets written to the Claude Code transcript JSONL file:</p>
+
+        <div class="config-file">
+            <div class="config-header">~/.claude/projects/.../api-session.jsonl</div>
+            <div class="config-body">
+<pre><span class="dim">{"type":"assistant","message":"I've added rate limiting...","ts":"..."}</span>
+<span class="dim">{"type":"assistant","message":"DONE_REPORT:\n- changed_files...","ts":"..."}</span>
+<span class="dim">{"type":"result","content":"Task completed","ts":"..."}</span></pre>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- PHASE 6: DONE_REPORT DETECTION -->
+<div class="phase">
+    <div class="phase-header">
+        <div class="phase-number">6</div>
+        <div class="phase-title">Dispatcher Detects DONE_REPORT</div>
+        <div class="phase-time">T+5min 2s</div>
+    </div>
+    <div class="phase-content">
+        <p>On the next poll cycle, dispatcher sees the prompt (ready state) and checks transcript:</p>
+
+        <div class="terminal">
+<pre><span class="dim"># check_done_report() runs:</span>
+
+<span class="out">Transcript: ~/.claude/projects/.../api-session.jsonl</span>
+<span class="out">File size: 487,234 bytes</span>
+<span class="out">Reading tail window (500KB)...</span>
+<span class="out">Searching for "DONE_REPORT"...</span>
+<span class="ok">✓ Found DONE_REPORT in transcript</span>
+<span class="out">  agent.awaiting_done_report = false</span>
+<span class="out">  agent.last_done_report_ts = 2024-01-14T10:05:02</span></pre>
+        </div>
+
+        <div class="diagram">
+<pre>
+<span class="dim">Tail-Bytes Search Algorithm:</span>
+
+┌─────────────────────────────────────────────────────────────┐
+│  Transcript file: 487,234 bytes                             │
+│                                                             │
+│  ├──────────────────────────────────────────────────────┤   │
+│  │<span class="dim">   older content (ignored)   </span>│<span class="ok">  last 500KB (searched)</span>  │   │
+│  ├──────────────────────────────────────────────────────┤   │
+│                                                             │
+│  <span class="cmd">TAIL_BYTES = 500,000</span>                                       │
+│                                                             │
+│  Why tail-bytes, not line count?                            │
+│  - Verbose agent output can be thousands of lines           │
+│  - Line parsing is slow for large files                     │
+│  - Byte seek is O(1), reliable                              │
+│  - 500KB catches DONE_REPORT even after verbose output      │
+│                                                             │
+│  <span class="ok">if 'DONE_REPORT' in content: return True</span>                  │
+└─────────────────────────────────────────────────────────────┘
+</pre>
+        </div>
+    </div>
+</div>
+
+<!-- PHASE 7: AUTO-AUDIT -->
+<div class="phase">
+    <div class="phase-header">
+        <div class="phase-number">7</div>
+        <div class="phase-title">Auto-Audit Runs</div>
+        <div class="phase-time">T+5min 3s</div>
+    </div>
+    <div class="phase-content">
+        <p>Since Agent 1 has <code>auto_audit: true</code>, the dispatcher runs verification:</p>
+
+        <div class="terminal">
+<pre><span class="dim"># run_auto_audit() executes:</span>
+
+<span class="out">━━━ Step 1: Check Invariants ━━━</span>
+<span class="prompt">$</span> <span class="cmd">python3 council/enforcement/check_invariants.py</span>
+
+<span class="out">Checking git diff against invariants...</span>
+<span class="out">Modified files:</span>
+<span class="out">  src/api/routes.py</span>
+<span class="out">  src/api/middleware.py</span>
+<span class="out">Forbidden paths: none matched</span>
+<span class="out">Protected paths: none matched</span>
+<span class="ok">✓ Invariants: PASS (0 violations)</span>
+
+<span class="out">━━━ Step 2: Audit DONE_REPORT Claims ━━━</span>
+<span class="prompt">$</span> <span class="cmd">python3 council/enforcement/audit_done.py --transcript api-session.jsonl</span>
+
+<span class="out">Parsing DONE_REPORT from transcript...</span>
+<span class="out">Verifying claims against evidence:</span>
+
+<span class="out">  changed_files: [src/api/routes.py, src/api/middleware.py]</span>
+<span class="out">    → Checking git diff output in transcript...</span>
+<span class="ok">    ✓ Matches</span>
+
+<span class="out">  commands_run: pytest tests/test_api.py -v (exit 0)</span>
+<span class="out">    → Checking Bash tool output in transcript...</span>
+<span class="ok">    ✓ Found matching command with exit code 0</span>
+
+<span class="out">  test_output: "12 passed in 2.34s"</span>
+<span class="out">    → Checking pytest output in transcript...</span>
+<span class="ok">    ✓ Matches</span>
+
+<span class="ok">━━━ AUDIT RESULT: VERIFIED ━━━</span>
+<span class="ok">All claims in DONE_REPORT match evidence in transcript.</span></pre>
+        </div>
+
+        <div class="info-box success">
+            <strong>What got verified:</strong>
+            <ul style="margin-top: 0.5rem; padding-left: 1.25rem; color: #8b949e;">
+                <li>Files listed in <code>changed_files</code> actually appear in git diff output</li>
+                <li>Commands in <code>commands_run</code> were actually executed (found in Bash tool calls)</li>
+                <li>Exit codes match claims</li>
+                <li>Test output matches what pytest actually printed</li>
+                <li>No forbidden paths were modified</li>
+            </ul>
+        </div>
+    </div>
+</div>
+
+<!-- PHASE 8: TASK APPROVED, DEQUEUE -->
+<div class="phase">
+    <div class="phase-header">
+        <div class="phase-number">8</div>
+        <div class="phase-title">Task Approved, Queue Dequeues</div>
+        <div class="phase-time">T+5min 5s</div>
+    </div>
+    <div class="phase-content">
+        <p>Audit passed! Dispatcher approves and sends next queued task:</p>
+
+        <div class="terminal">
+<pre><span class="ok">✓ Agent 1 (API): APPROVED</span>
+<span class="out">  DONE_REPORT verified, invariants clean</span>
+<span class="out">  audit_fail_streak = 0</span>
+
+<span class="out">Dequeuing next task...</span>
+<span class="out">Sending: "Add tests for rate limiting"</span>
+<span class="ok">✓ Sent to Agent 1</span>
+<span class="out">Queue depth: 1 remaining</span>
+
+<span class="prompt">council></span> <span class="cmd">status</span>
+<span class="out">Agent 1 (API):      <span class="warn">working</span> [awaiting DONE_REPORT] Q:1 <span class="ok">last: APPROVED 5s ago</span></span>
+<span class="out">Agent 2 (Frontend): <span class="ok">ready</span></span>
+<span class="out">Agent 3 (Tests):    <span class="ok">ready</span></span>
+<span class="out">Agent 4 (Docs):     <span class="ok">ready</span></span></pre>
+        </div>
+
+        <div class="diagram">
+<pre>
+<span class="dim">Dequeue Logic:</span>
+
+┌─────────────────────────────────────────────────────────────┐
+│                                                             │
+│  Agent becomes ready + DONE_REPORT detected                 │
+│              │                                              │
+│              ▼                                              │
+│  ┌─────────────────────────────────────────────────────┐    │
+│  │  Is there a queued task?                            │    │
+│  └─────────────────────────────────────────────────────┘    │
+│              │                                              │
+│      ┌───────┴───────┐                                      │
+│      │               │                                      │
+│     Yes              No                                     │
+│      │               │                                      │
+│      ▼               ▼                                      │
+│  ┌─────────┐    ┌─────────────────────────────────────┐     │
+│  │ Circuit │    │ Is auto_enabled?                    │     │
+│  │ open?   │    │   Yes → send "continue"             │     │
+│  └─────────┘    │   No  → idle                        │     │
+│      │          └─────────────────────────────────────┘     │
+│  ┌───┴───┐                                                  │
+│ Yes     No                                                  │
+│  │       │                                                  │
+│  ▼       ▼                                                  │
+│ <span class="err">BLOCKED</span>  <span class="ok">SEND TASK</span>                                          │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+</pre>
+        </div>
+    </div>
+</div>
+
+<!-- AUTO-CONTINUE DEEP DIVE -->
+<h2>Auto-Continue: How It Actually Works</h2>
+
+<div class="phase">
+    <div class="phase-header">
+        <div class="phase-number">🔄</div>
+        <div class="phase-title">The Auto-Continue Mechanism</div>
+    </div>
+    <div class="phase-content">
+        <p>Auto-continue is a <strong>"keep going" mechanism</strong>, NOT a task system. It's for when an agent needs multiple turns to complete something large.</p>
+
+        <div class="info-box">
+            <strong>What it does:</strong>
+            <p style="color: #8b949e; margin-top: 0.5rem;">
+                When enabled, the dispatcher literally sends the word <code>"continue"</code> to the tmux pane when the agent becomes ready. Claude Code sees this as a new prompt and resumes working.
+            </p>
+        </div>
+
+        <h3 style="margin-top: 1.5rem;">Step-by-Step Flow</h3>
+
+        <div class="terminal">
+<pre><span class="dim"># 1. You enable auto-continue</span>
+<span class="prompt">council></span> <span class="cmd">auto 1</span>
+<span class="out">Auto-continue enabled for Agent 1</span>
+<span class="out">  auto_enabled = true</span>
+
+<span class="dim"># 2. Agent is working on a big task...</span>
+<span class="out">Agent 1 (API): <span class="warn">working</span></span>
+
+<span class="dim"># 3. Agent hits context limit or pauses, prompt appears</span>
+<span class="out">Agent 1 (API): <span class="ok">ready</span></span>
+
+<span class="dim"># 4. Dispatcher detects ready state on next poll (2s)</span>
+<span class="out">Agent 1 ready. Checking conditions...</span>
+
+<span class="dim"># 5. Is strict mode? Check for DONE_REPORT first</span>
+<span class="out">  mode: strict → checking transcript for DONE_REPORT...</span>
+<span class="out">  DONE_REPORT: not found</span>
+<span class="out">  → Agent paused mid-task, not done</span>
+
+<span class="dim"># 6. Check circuit breaker (git progress)</span>
+<span class="out">  Checking git diff in ~/projects/myapp...</span>
+<span class="out">  Changes detected: 2 files modified</span>
+<span class="out">  → Circuit closed, progress confirmed</span>
+
+<span class="dim"># 7. Send "continue"</span>
+<span class="out">Sending "continue" to Agent 1...</span>
+<span class="ok">✓ Sent</span>
+
+<span class="dim"># 8. Agent receives "continue" and resumes</span>
+<span class="out">Agent 1 (API): <span class="warn">working</span></span></pre>
+        </div>
+
+        <div class="diagram">
+<pre>
+<span class="dim">Auto-Continue Decision Tree:</span>
+
+  Agent becomes ready (prompt visible)
+              │
+              ▼
+  ┌─────────────────────────────────────┐
+  │  Is auto_enabled for this agent?    │
+  └─────────────────────────────────────┘
+              │
+      ┌───────┴───────┐
+      │               │
+     Yes              No
+      │               │
+      ▼               ▼
+  ┌─────────────────┐   <span class="dim">Do nothing</span>
+  │ Is strict mode? │   <span class="dim">(wait for manual input)</span>
+  └─────────────────┘
+      │
+  ┌───┴───┐
+  │       │
+ Yes      No
+  │       │
+  ▼       │
+┌──────────────────────┐    │
+│ DONE_REPORT present? │    │
+└──────────────────────┘    │
+  │                         │
+┌─┴─┐                       │
+│   │                       │
+Yes No                      │
+│   │                       │
+│   ▼                       │
+│ <span class="ok">Send "continue"</span>          │
+│ <span class="dim">(agent paused mid-task)</span>   │
+│                           │
+▼                           ▼
+┌─────────────────────────────────────┐
+│ Check circuit breaker (git progress)│
+└─────────────────────────────────────┘
+              │
+      ┌───────┴───────┐
+      │               │
+   Closed           Open
+      │               │
+      ▼               ▼
+  <span class="ok">Send "continue"</span>   <span class="err">BLOCKED</span>
+  <span class="dim">or dequeue task</span>   <span class="dim">(no progress detected)</span>
+</pre>
+        </div>
+
+        <h3 style="margin-top: 1.5rem;">Important Nuances</h3>
+
+        <div class="split">
+            <div class="agent-card">
+                <div class="agent-name">Auto-Continue vs Queue</div>
+                <div class="agent-status" style="font-size: 0.85rem;">
+                    Queue takes priority over auto-continue.<br><br>
+                    If there's a queued task AND agent is ready:<br>
+                    → Send queued task (not "continue")<br><br>
+                    If NO queued tasks AND auto_enabled:<br>
+                    → Send "continue"
+                </div>
+            </div>
+            <div class="agent-card">
+                <div class="agent-name">What "continue" Means to Agent</div>
+                <div class="agent-status" style="font-size: 0.85rem;">
+                    The agent just sees a user message saying "continue".<br><br>
+                    It relies on its own context memory to know what it was doing.<br><br>
+                    <span class="warn">Limitation:</span> No task context passed - agent must remember.
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- APPROVAL FLOW DETAILED -->
+<h2>Approval Flow: The Full Picture</h2>
+
+<div class="phase">
+    <div class="phase-header">
+        <div class="phase-number">✓</div>
+        <div class="phase-title">What "Approval" Actually Means</div>
+    </div>
+    <div class="phase-content">
+        <p>There's no human approval by default. "Approval" means the automated audit passed.</p>
+
+        <div class="diagram">
+<pre>
+<span class="dim">Complete Approval Flow:</span>
+
+  Agent outputs DONE_REPORT
+              │
+              ▼
+  ┌─────────────────────────────────────────────────┐
+  │  Dispatcher detects DONE_REPORT                  │
+  │  (tail-bytes search of transcript JSONL)         │
+  └─────────────────────────────────────────────────┘
+              │
+              ▼
+  ┌─────────────────────────────────────────────────┐
+  │  Is auto_audit: true for this agent?            │
+  └─────────────────────────────────────────────────┘
+              │
+      ┌───────┴───────┐
+      │               │
+     Yes              No
+      │               │
+      ▼               ▼
+  <span class="cmd">Run audits</span>        <span class="ok">APPROVED</span>
+      │               <span class="dim">(trust DONE_REPORT)</span>
+      │               <span class="dim">→ dequeue next task</span>
+      ▼
+  ┌─────────────────────────────────────────────────┐
+  │  Step 1: check_invariants.py                    │
+  │  - Did agent modify forbidden paths?            │
+  │  - Did agent touch protected files?             │
+  └─────────────────────────────────────────────────┘
+              │
+      ┌───────┴───────┐
+      │               │
+    Pass            Fail
+      │               │
+      ▼               ▼
+  <span class="cmd">Continue</span>         <span class="err">REJECTED</span>
+      │               <span class="dim">→ handle failure</span>
+      ▼
+  ┌─────────────────────────────────────────────────┐
+  │  Step 2: audit_done.py                          │
+  │  - Parse DONE_REPORT claims                     │
+  │  - Find evidence in transcript                  │
+  │  - Compare claims vs evidence                   │
+  └─────────────────────────────────────────────────┘
+              │
+      ┌───────┴───────┐
+      │               │
+    Pass            Fail
+      │               │
+      ▼               ▼
+  ┌──────────────┐   ┌──────────────────────────────┐
+  │ <span class="ok">APPROVED</span>     │   │ <span class="err">REJECTED</span>                    │
+  │              │   │                              │
+  │ • streak = 0│   │ • audit_fail_streak++       │
+  │ • dequeue   │   │ • check MAX_AUDIT_RETRIES   │
+  │   next task │   │ • auto-queue fix or escalate│
+  └──────────────┘   └──────────────────────────────┘
+</pre>
+        </div>
+
+        <h3 style="margin-top: 1.5rem;">What Gets Verified</h3>
+
+        <div class="step-grid">
+            <div class="step-card">
+                <h4>changed_files</h4>
+                <p>Auditor finds git diff output in transcript. Compares file list to claimed files.</p>
+            </div>
+            <div class="step-card">
+                <h4>commands_run</h4>
+                <p>Searches transcript for Bash tool calls. Verifies commands were actually executed.</p>
+            </div>
+            <div class="step-card">
+                <h4>test_output</h4>
+                <p>Finds pytest/jest/etc output in transcript. Compares to claimed results.</p>
+            </div>
+            <div class="step-card">
+                <h4>exit codes</h4>
+                <p>Verifies claimed exit codes match actual tool results in transcript JSON.</p>
+            </div>
+        </div>
+
+        <div class="info-box warning" style="margin-top: 1rem;">
+            <strong>Key Insight:</strong>
+            <p style="color: #8b949e; margin-top: 0.5rem;">
+                The audit doesn't re-run commands. It only checks that what the agent <em>claimed</em> matches what's <em>recorded in the transcript</em>. The transcript is the source of truth.
+            </p>
+        </div>
+    </div>
+</div>
+
+<!-- PHASE 9: AUDIT FAILURE SCENARIO (EXPANDED) -->
+<h2>Failure Scenario: What Actually Happens</h2>
+
+<div class="phase">
+    <div class="phase-header" style="background: #3d1f1f;">
+        <div class="phase-number" style="background: #f85149;">!</div>
+        <div class="phase-title">When an Agent Lies or Messes Up</div>
+    </div>
+    <div class="phase-content">
+        <p>Here's the complete failure flow when audit finds a discrepancy:</p>
+
+        <h3 style="margin-top: 1rem;">Turn 1: Agent Claims Tests Passed</h3>
+
+        <div class="terminal">
+<pre><span class="dim"># Agent outputs this DONE_REPORT:</span>
+<span class="out">DONE_REPORT:</span>
+<span class="out">- changed_files: [src/api/routes.py]</span>
+<span class="out">- commands_run: pytest tests/test_api.py -v (exit 0)</span>
+<span class="out">- test_output: "<span class="ok">12 passed</span> in 2.34s"</span>
+<span class="out">- invariants: clean</span>
+
+<span class="dim"># But the actual pytest output in transcript was:</span>
+<span class="err">FAILED tests/test_api.py::test_rate_limit - AssertionError</span>
+<span class="err">1 failed, 11 passed in 2.41s</span></pre>
+        </div>
+
+        <h3 style="margin-top: 1.5rem;">Audit Runs and Finds the Lie</h3>
+
+        <div class="terminal">
+<pre><span class="prompt">$</span> <span class="cmd">python3 council/enforcement/audit_done.py --transcript api-session.jsonl</span>
+
+<span class="out">Parsing DONE_REPORT from transcript...</span>
+<span class="out">Found DONE_REPORT at line 1847</span>
+
+<span class="out">Verifying claims:</span>
+
+<span class="out">  changed_files: [src/api/routes.py]</span>
+<span class="out">    → Searching for git diff output...</span>
+<span class="out">    → Found: "src/api/routes.py | 45 ++++++++"</span>
+<span class="ok">    ✓ Match</span>
+
+<span class="out">  commands_run: pytest tests/test_api.py -v (exit 0)</span>
+<span class="out">    → Searching for Bash tool call...</span>
+<span class="out">    → Found command execution</span>
+<span class="out">    → Claimed exit: 0, Actual exit: 1</span>
+<span class="err">    ✗ EXIT CODE MISMATCH</span>
+
+<span class="out">  test_output: "12 passed in 2.34s"</span>
+<span class="out">    → Searching for pytest output...</span>
+<span class="out">    → Found: "1 failed, 11 passed in 2.41s"</span>
+<span class="err">    ✗ OUTPUT MISMATCH</span>
+
+<span class="err">━━━ AUDIT RESULT: REJECTED ━━━</span>
+<span class="err">Discrepancies found:</span>
+<span class="err">  1. exit code: claimed 0, actual 1</span>
+<span class="err">  2. test_output: claimed "12 passed", actual "1 failed, 11 passed"</span></pre>
+        </div>
+
+        <h3 style="margin-top: 1.5rem;">Dispatcher Handles the Failure</h3>
+
+        <div class="terminal">
+<pre><span class="err">✗ Agent 1 (API): AUDIT FAILED</span>
+<span class="out">  audit_fail_streak: 0 → 1</span>
+<span class="out">  MAX_AUDIT_RETRIES: 1</span>
+<span class="out">  streak < max → auto-queue fix task</span>
+
+<span class="out">Auto-queuing fix task...</span>
+<span class="out">Task: "Fix audit issues: exit code mismatch (claimed 0, actual 1), test_output mismatch"</span>
+<span class="out">Sending to Agent 1...</span>
+<span class="ok">✓ Sent</span></pre>
+        </div>
+
+        <h3 style="margin-top: 1.5rem;">Turn 2: Agent Tries to Fix (and Fails Again)</h3>
+
+        <div class="terminal">
+<pre><span class="dim"># Agent works on fix, outputs new DONE_REPORT</span>
+<span class="dim"># But still has issues...</span>
+
+<span class="out">Audit running...</span>
+<span class="err">✗ AUDIT FAILED: test still failing</span>
+
+<span class="out">  audit_fail_streak: 1 → 2</span>
+<span class="out">  MAX_AUDIT_RETRIES: 1</span>
+<span class="err">  streak > max → ESCALATE TO HUMAN</span>
+
+<span class="err">━━━ LOOP GUARD TRIGGERED ━━━</span>
+<span class="err">Agent 1 has failed audit 2 times on same task.</span>
+<span class="err">Setting status: REQUIRES HUMAN</span>
+<span class="err">Queue: BLOCKED (no auto-dequeue)</span>
+<span class="err">Auto-continue: DISABLED</span></pre>
+        </div>
+
+        <h3 style="margin-top: 1.5rem;">Status Shows the Problem</h3>
+
+        <div class="terminal">
+<pre><span class="prompt">council></span> <span class="cmd">status</span>
+<span class="out">Agent 1 (API): <span class="ok">ready</span> <span class="err">[REQUIRES HUMAN]</span></span>
+<span class="err">  │ Audit failed 2 times. Manual intervention required.</span>
+<span class="err">  │ Last rejection: test_output mismatch</span>
+<span class="err">  │ Queue: BLOCKED (1 task waiting)</span>
+<span class="out">Agent 2 (Frontend): <span class="ok">ready</span></span>
+<span class="out">Agent 3 (Tests):    <span class="ok">ready</span></span>
+<span class="out">Agent 4 (Docs):     <span class="ok">ready</span></span></pre>
+        </div>
+
+        <h3 style="margin-top: 1.5rem;">Your Options</h3>
+
+        <div class="split">
+            <div class="agent-card">
+                <div class="agent-name">Option 1: Fix It Yourself</div>
+                <div class="agent-status" style="font-size: 0.85rem;">
+<pre style="margin: 0; font-size: 0.8rem;">
+<span class="prompt">council></span> <span class="dim"># Look at what's wrong</span>
+<span class="prompt">$</span> cd ~/projects/myapp
+<span class="prompt">$</span> pytest tests/test_api.py -v
+<span class="dim"># Fix the actual bug</span>
+<span class="prompt">$</span> vim src/api/routes.py
+<span class="prompt">council></span> reset 1
+<span class="out">Agent 1 reset. audit_fail_streak = 0</span>
+</pre>
+                </div>
+            </div>
+            <div class="agent-card">
+                <div class="agent-name">Option 2: Give Better Instructions</div>
+                <div class="agent-status" style="font-size: 0.85rem;">
+<pre style="margin: 0; font-size: 0.8rem;">
+<span class="prompt">council></span> 1: The test is failing because
+  test_rate_limit expects 429 status
+  but you're returning 200. Fix the
+  rate limit middleware to actually
+  return 429 when limit exceeded.
+<span class="ok">✓ Sent to Agent 1</span>
+
+<span class="prompt">council></span> reset 1
+<span class="out">Agent 1 reset. Ready for new attempt.</span>
+</pre>
+                </div>
+            </div>
+        </div>
+
+        <div class="info-box error" style="margin-top: 1.5rem;">
+            <strong>Why the Loop Guard Exists:</strong>
+            <p style="color: #8b949e; margin-top: 0.5rem;">
+                Without it, a failing audit would cause infinite cycles:<br>
+                <code>fail → "fix audit issues" → fail → "fix audit issues" → ...</code><br><br>
+                <code>MAX_AUDIT_RETRIES = 1</code> means: one auto-fix attempt, then human must intervene.
+            </p>
+        </div>
+    </div>
+</div>
+
+<!-- CIRCUIT BREAKER -->
+<h2>Circuit Breaker: Preventing Infinite Loops</h2>
+
+<div class="phase">
+    <div class="phase-header">
+        <div class="phase-number">⚡</div>
+        <div class="phase-title">Git-Based Progress Detection</div>
+    </div>
+    <div class="phase-content">
+        <p>The circuit breaker is <strong>completely separate from audit</strong>. It prevents auto-continue from looping forever when an agent is stuck.</p>
+
+        <div class="info-box">
+            <strong>The Problem It Solves:</strong>
+            <p style="color: #8b949e; margin-top: 0.5rem;">
+                Agent receives "continue" → talks but doesn't modify code → becomes ready → gets "continue" → talks more → ready → "continue" → <em>infinite loop</em>
+            </p>
+        </div>
+
+        <h3 style="margin-top: 1.5rem;">How It Works (Code-Level)</h3>
+
+        <div class="config-file">
+            <div class="config-header">council/dispatcher/gitwatch.py</div>
+            <div class="config-body">
+<pre><span class="dim"># Simplified version of the actual code</span>
+<span class="cmd">def check_progress</span>(worktree: str) -> bool:
+    <span class="dim">"""Returns True if git shows any changes since last check."""</span>
+    result = subprocess.run(
+        ['git', 'diff', '--stat'],
+        cwd=worktree,
+        capture_output=True
+    )
+    has_changes = len(result.stdout.strip()) > 0
+    <span class="cmd">return has_changes</span>
+
+<span class="dim"># Called before each auto-continue</span>
+<span class="cmd">def should_continue</span>(agent) -> bool:
+    if agent.circuit_open:
+        return False  <span class="dim"># Already stuck</span>
+
+    if check_progress(agent.worktree):
+        agent.no_progress_streak = 0  <span class="dim"># Reset on progress</span>
+        return True
+    else:
+        agent.no_progress_streak += 1
+        if agent.no_progress_streak >= <span class="err">MAX_NO_PROGRESS</span>:  <span class="dim"># 3</span>
+            agent.circuit_open = True
+            return False
+        return True  <span class="dim"># Still under threshold</span></pre>
+            </div>
+        </div>
+
+        <h3 style="margin-top: 1.5rem;">Example: Agent Gets Stuck</h3>
+
+        <div class="terminal">
+<pre><span class="prompt">council></span> <span class="cmd">auto 1</span>
+<span class="out">Auto-continue enabled for Agent 1</span>
+<span class="out">  worktree: ~/projects/myapp</span>
+<span class="out">  MAX_NO_PROGRESS: 3</span>
+
+<span class="dim"># Iteration 1: Agent makes real changes</span>
+<span class="out">Agent 1 ready. Pre-continue check...</span>
+<span class="out">  $ git diff --stat ~/projects/myapp</span>
+<span class="out">  src/api/routes.py | 45 ++++++++++++++++++</span>
+<span class="out">  1 file changed, 45 insertions</span>
+<span class="ok">  ✓ Progress detected</span>
+<span class="out">  no_progress_streak = 0</span>
+<span class="out">Sending "continue"...</span>
+
+<span class="dim"># Iteration 2: Agent just talks, no code changes</span>
+<span class="out">Agent 1 ready. Pre-continue check...</span>
+<span class="out">  $ git diff --stat ~/projects/myapp</span>
+<span class="out">  (empty - no changes)</span>
+<span class="warn">  ⚠ No progress</span>
+<span class="out">  no_progress_streak = 1</span>
+<span class="out">Sending "continue"... <span class="dim">(1/3 strikes)</span></span>
+
+<span class="dim"># Iteration 3: Still no changes</span>
+<span class="out">Agent 1 ready. Pre-continue check...</span>
+<span class="out">  $ git diff --stat ~/projects/myapp</span>
+<span class="out">  (empty)</span>
+<span class="warn">  ⚠ No progress</span>
+<span class="out">  no_progress_streak = 2</span>
+<span class="out">Sending "continue"... <span class="dim">(2/3 strikes)</span></span>
+
+<span class="dim"># Iteration 4: Third strike - you're out</span>
+<span class="out">Agent 1 ready. Pre-continue check...</span>
+<span class="out">  $ git diff --stat ~/projects/myapp</span>
+<span class="out">  (empty)</span>
+<span class="err">  ✗ No progress - streak = 3</span>
+<span class="err">  ━━━ CIRCUIT OPEN ━━━</span>
+<span class="err">  Auto-continue DISABLED for Agent 1</span>
+<span class="err">  Reason: 3 iterations without git changes</span>
+
+<span class="out">Sending notification...</span>
+<span class="out">  📱 Pushover: "Agent 1 circuit open - stuck without progress"</span></pre>
+        </div>
+
+        <h3 style="margin-top: 1.5rem;">Circuit States</h3>
+
+        <div class="split">
+            <div class="agent-card">
+                <div class="agent-name" style="color: #3fb950;">Circuit Closed (Normal)</div>
+                <div class="agent-status" style="font-size: 0.85rem;">
+                    <span class="badge badge-ready">CLOSED</span><br><br>
+                    • Auto-continue works normally<br>
+                    • Queue dequeues on ready<br>
+                    • Git progress resets streak<br>
+                    • This is the default state
+                </div>
+            </div>
+            <div class="agent-card" style="border-color: #f85149;">
+                <div class="agent-name" style="color: #f85149;">Circuit Open (Stuck)</div>
+                <div class="agent-status" style="font-size: 0.85rem;">
+                    <span class="badge" style="background: #f85149;">OPEN</span><br><br>
+                    • No auto-continue<br>
+                    • Queue BLOCKED<br>
+                    • Manual reset required<br>
+                    • Notification sent
+                </div>
+            </div>
+        </div>
+
+        <h3 style="margin-top: 1.5rem;">Recovery Options</h3>
+
+        <div class="terminal">
+<pre><span class="dim"># Option 1: Manual reset (clears everything)</span>
+<span class="prompt">council></span> <span class="cmd">reset 1</span>
+<span class="out">Agent 1 reset:</span>
+<span class="out">  circuit_open = false</span>
+<span class="out">  no_progress_streak = 0</span>
+<span class="out">  audit_fail_streak = 0</span>
+<span class="ok">Ready for new tasks</span>
+
+<span class="dim"># Option 2: Mark progress manually (for non-git tasks)</span>
+<span class="prompt">council></span> <span class="cmd">progress 1 mark</span>
+<span class="out">Progress marked for Agent 1</span>
+<span class="out">  no_progress_streak = 0</span>
+<span class="dim">↑ Use when task legitimately doesn't produce git changes</span>
+<span class="dim">  (research, analysis, review, etc.)</span>
+
+<span class="dim"># Option 3: Give agent explicit instructions</span>
+<span class="prompt">council></span> <span class="cmd">1: You seem stuck. The actual issue is...</span>
+<span class="ok">✓ Sent to Agent 1</span>
+<span class="dim">↑ Sometimes agent just needs better guidance</span></pre>
+        </div>
+
+        <div class="info-box warning" style="margin-top: 1.5rem;">
+            <strong>Circuit Breaker vs Audit - Key Difference:</strong>
+            <table style="margin-top: 0.5rem; font-size: 0.85rem; color: #8b949e;">
+                <tr><td style="padding-right: 2rem;"><strong>Audit</strong></td><td>Checks if agent did what it <em>claimed</em> in DONE_REPORT</td></tr>
+                <tr><td><strong>Circuit Breaker</strong></td><td>Checks if agent is making <em>real progress</em> (git changes)</td></tr>
+            </table>
+            <p style="color: #8b949e; margin-top: 0.5rem;">
+                An agent can pass audit (claims match evidence) but still trip the circuit breaker (no new changes between continues).
+            </p>
+        </div>
+    </div>
+</div>
+
+<!-- SUB-AGENTS -->
+<h2>Sub-Agents: What They Are (and Aren't)</h2>
+
+<div class="phase">
+    <div class="phase-header">
+        <div class="phase-number">🤖</div>
+        <div class="phase-title">Sub-Agents vs Dispatcher Agents</div>
+    </div>
+    <div class="phase-content">
+        <p>There are two different "agent" concepts. Don't confuse them.</p>
+
+        <div class="split">
+            <div class="agent-card">
+                <div class="agent-name">Dispatcher Agents (1, 2, 3, 4)</div>
+                <div class="agent-status" style="font-size: 0.85rem;">
+                    <strong>What they are:</strong><br>
+                    Separate Claude Code processes in tmux panes.<br><br>
+                    <strong>Managed by:</strong> Dispatcher (simple.py)<br><br>
+                    <strong>Commands:</strong><br>
+                    <code>1: do something</code><br>
+                    <code>queue 1 "task"</code><br>
+                    <code>auto 1</code>
+                </div>
+            </div>
+            <div class="agent-card">
+                <div class="agent-name">Sub-Agents (.claude/agents/)</div>
+                <div class="agent-status" style="font-size: 0.85rem;">
+                    <strong>What they are:</strong><br>
+                    Specialized prompts/modes within a Claude Code session.<br><br>
+                    <strong>Managed by:</strong> Claude Code itself<br><br>
+                    <strong>Commands:</strong><br>
+                    <code>claude --agent code-architect</code><br>
+                    <code>claude --agent verify-app</code>
+                </div>
+            </div>
+        </div>
+
+        <h3 style="margin-top: 1.5rem;">Sub-Agents: A Claude Code Feature</h3>
+
+        <p>Sub-agents are defined in <code>.claude/agents/</code> directory. They're <strong>NOT managed by the dispatcher</strong>.</p>
+
+        <div class="config-file">
+            <div class="config-header">.claude/agents/code-architect.md</div>
+            <div class="config-body">
+<pre><span class="dim"># This file defines a sub-agent persona</span>
+
+You are a code architect. Your role is to:
+- Review architecture decisions
+- Identify design issues
+- Suggest improvements
+
+When reviewing code, consider:
+- Separation of concerns
+- Dependency management
+- Testability
+...</pre>
+            </div>
+        </div>
+
+        <h3 style="margin-top: 1.5rem;">How They're Used</h3>
+
+        <div class="terminal">
+<pre><span class="dim"># Method 1: Start Claude Code with a sub-agent</span>
+<span class="prompt">$</span> <span class="cmd">claude --agent code-architect</span>
+<span class="out">Starting Claude Code with code-architect persona...</span>
+
+<span class="dim"># Method 2: Tell an existing agent to use sub-agent approach</span>
+<span class="prompt">council></span> <span class="cmd">1: Review this PR using the code-architect approach</span>
+<span class="dim">↑ Agent 1 reads .claude/agents/code-architect.md and adopts that persona</span>
+
+<span class="dim"># Method 3: Via slash command</span>
+<span class="prompt">council></span> <span class="cmd">1: /review</span>
+<span class="dim">↑ /review skill may invoke a review sub-agent internally</span></pre>
+        </div>
+
+        <h3 style="margin-top: 1.5rem;">Available Sub-Agents</h3>
+
+        <div class="step-grid">
+            <div class="step-card">
+                <h4>code-architect</h4>
+                <p>Design reviews, architecture decisions, structural improvements.</p>
+            </div>
+            <div class="step-card">
+                <h4>verify-app</h4>
+                <p>Test implementation, edge cases, integration verification.</p>
+            </div>
+            <div class="step-card">
+                <h4>code-simplifier</h4>
+                <p>Reduce complexity, remove dead code, simplify logic.</p>
+            </div>
+            <div class="step-card">
+                <h4>build-validator</h4>
+                <p>Deployment readiness, build checks, CI/CD validation.</p>
+            </div>
+            <div class="step-card">
+                <h4>oncall-guide</h4>
+                <p>Debug production issues, incident response guidance.</p>
+            </div>
+        </div>
+
+        <div class="info-box" style="margin-top: 1.5rem;">
+            <strong>Key Point:</strong>
+            <p style="color: #8b949e; margin-top: 0.5rem;">
+                The dispatcher doesn't know or care about sub-agents. It just sends text to tmux panes. Sub-agents are entirely within Claude Code's domain - a way to give the AI a specialized persona or task focus.
+            </p>
+        </div>
+
+        <h3 style="margin-top: 1.5rem;">Future: Cross-Agent Visibility</h3>
+
+        <p style="color: #8b949e;">Planned feature: let one dispatcher agent see what another produced. Not implemented yet.</p>
+
+        <div class="terminal">
+<pre><span class="dim"># Hypothetical future command:</span>
+<span class="prompt">council></span> <span class="cmd">1: Review what Agent 2 just did</span>
+<span class="out">Fetching Agent 2's recent output...</span>
+<span class="out">Sending context to Agent 1...</span>
+<span class="dim">↑ Would require transcript sharing between agents</span></pre>
+        </div>
+    </div>
+</div>
+
+<!-- REVIEW MODE -->
+<h2>Review Mode (Adversarial Critique)</h2>
+
+<div class="phase">
+    <div class="phase-header">
+        <div class="phase-number">🔍</div>
+        <div class="phase-title">Context-Blind Review with Hard Contract</div>
+    </div>
+    <div class="phase-content">
+        <p>Review mode enforces evidence-based critique. It's <strong>manual</strong> - you invoke it when you want a harsh critique.</p>
+
+        <div class="split">
+            <div>
+                <h4 style="color: #f85149; margin-bottom: 1rem;">❌ Without Evidence</h4>
+                <div class="terminal">
+<pre><span class="prompt">claude></span> <span class="cmd">/inject review</span>
+<span class="out">Mode set to review</span>
+
+<span class="prompt">claude></span> <span class="cmd">Review the API changes</span>
+
+<span class="err">REJECT: Missing evidence:</span>
+<span class="err">  - git diff output</span>
+<span class="err">  - test results</span>
+<span class="err">  - invariants check</span>
+<span class="err">Cannot review without artifacts.</span></pre>
+                </div>
+            </div>
+            <div>
+                <h4 style="color: #3fb950; margin-bottom: 1rem;">✓ With Evidence</h4>
+                <div class="terminal">
+<pre><span class="prompt">claude></span> <span class="cmd">Review:</span>
+<span class="cmd">git diff:</span> [actual diff]
+<span class="cmd">tests:</span> 12 passed
+<span class="cmd">invariants:</span> clean
+
+<span class="out">BLOCKERS:</span>
+<span class="out">  None</span>
+
+<span class="out">SHOULD_FIX:</span>
+<span class="out">  - Add retry logic for 429s</span>
+
+<span class="out">SUGGESTIONS:</span>
+<span class="out">  - Consider redis for rate limits</span>
+
+<span class="ok">VERDICT: APPROVE</span></pre>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- QA SYSTEMS COMPARISON -->
+<h2>QA Systems: How They Fit Together</h2>
+
+<div class="phase">
+    <div class="phase-header">
+        <div class="phase-number">📊</div>
+        <div class="phase-title">Three Different QA Mechanisms</div>
+    </div>
+    <div class="phase-content">
+        <p>There are three QA systems that serve different purposes. They're independent - one doesn't replace another.</p>
+
+        <div class="config-file" style="margin-top: 1rem;">
+            <div class="config-header">Comparison Table</div>
+            <div class="config-body">
+<pre style="font-size: 0.85rem;">
+┌─────────────────┬────────────────────────┬─────────────────────┬─────────────────────┐
+│ <strong>System</strong>          │ <strong>What It Checks</strong>         │ <strong>When It Runs</strong>        │ <strong>Automatic?</strong>         │
+├─────────────────┼────────────────────────┼─────────────────────┼─────────────────────┤
+│ <span class="ok">Audit</span>           │ Claims in DONE_REPORT  │ After DONE_REPORT   │ Yes, if             │
+│                 │ match transcript       │ detected            │ auto_audit: true    │
+│                 │ evidence               │                     │                     │
+├─────────────────┼────────────────────────┼─────────────────────┼─────────────────────┤
+│ <span class="warn">Circuit Breaker</span> │ Git changes between    │ Before each         │ Yes, if             │
+│                 │ auto-continue turns    │ auto-continue       │ auto N enabled      │
+├─────────────────┼────────────────────────┼─────────────────────┼─────────────────────┤
+│ <span class="file">Review Mode</span>     │ Code quality,          │ When you invoke     │ No, manual          │
+│                 │ architecture,          │ /inject review      │ /inject review      │
+│                 │ adversarial critique   │                     │                     │
+└─────────────────┴────────────────────────┴─────────────────────┴─────────────────────┘
+</pre>
+            </div>
+        </div>
+
+        <h3 style="margin-top: 1.5rem;">In Plain English</h3>
+
+        <div class="step-grid">
+            <div class="step-card" style="border-left: 3px solid #3fb950;">
+                <h4 style="color: #3fb950;">Audit</h4>
+                <p><strong>"Did you actually do what you said?"</strong></p>
+                <p style="margin-top: 0.5rem; font-size: 0.8rem; color: #6e7681;">
+                    Agent says "tests passed" → Audit finds actual pytest output → Do they match?
+                </p>
+            </div>
+            <div class="step-card" style="border-left: 3px solid #d29922;">
+                <h4 style="color: #d29922;">Circuit Breaker</h4>
+                <p><strong>"Are you making real progress?"</strong></p>
+                <p style="margin-top: 0.5rem; font-size: 0.8rem; color: #6e7681;">
+                    Auto-continue keeps running → Check git diff → Any file changes since last time?
+                </p>
+            </div>
+            <div class="step-card" style="border-left: 3px solid #d2a8ff;">
+                <h4 style="color: #d2a8ff;">Review Mode</h4>
+                <p><strong>"Give me a harsh critique."</strong></p>
+                <p style="margin-top: 0.5rem; font-size: 0.8rem; color: #6e7681;">
+                    You want adversarial feedback → Invoke review → Get blockers/fixes/suggestions
+                </p>
+            </div>
+        </div>
+
+        <h3 style="margin-top: 1.5rem;">How They Interact</h3>
+
+        <div class="diagram">
+<pre>
+<span class="dim">Scenario: Agent completes a task with auto-continue enabled</span>
+
+  Agent outputs DONE_REPORT
+              │
+              ▼
+  ┌─────────────────────────────────────────────────┐
+  │  <span class="ok">AUDIT runs</span> (if auto_audit: true)               │
+  │  Checks: claims match transcript evidence?      │
+  └─────────────────────────────────────────────────┘
+              │
+              │ Pass
+              ▼
+  Dispatcher marks task complete, dequeues next
+              │
+              │ Agent works, becomes ready
+              ▼
+  ┌─────────────────────────────────────────────────┐
+  │  <span class="warn">CIRCUIT BREAKER checks</span> (if auto N enabled)    │
+  │  Checks: git diff shows changes?                │
+  └─────────────────────────────────────────────────┘
+              │
+              │ Pass
+              ▼
+  Send "continue" or next queued task
+              │
+              │ Eventually you want human review
+              ▼
+  ┌─────────────────────────────────────────────────┐
+  │  <span class="file">REVIEW MODE</span> (manual: /inject review)          │
+  │  You: "Review what agent produced"              │
+  │  Claude: "Here are blockers, should-fix, etc."  │
+  └─────────────────────────────────────────────────┘
+
+<span class="dim">Each system catches different problems:</span>
+  - Agent lies about test results → <span class="ok">Audit catches it</span>
+  - Agent loops without code changes → <span class="warn">Circuit breaker catches it</span>
+  - Agent's code works but has design flaws → <span class="file">Review mode catches it</span>
+</pre>
+        </div>
+
+        <h3 style="margin-top: 1.5rem;">Configuration for Each</h3>
+
+        <div class="config-file">
+            <div class="config-header">~/.council/config.yaml</div>
+            <div class="config-body">
+<pre>agents:
+  1:
+    pane_id: "%0"
+    name: "API"
+    worktree: ~/projects/myapp
+
+    <span class="dim"># For AUDIT:</span>
+    <span class="ok">mode: strict</span>                     <span class="dim"># Requires DONE_REPORT</span>
+    <span class="ok">auto_audit: true</span>                 <span class="dim"># Run audit automatically</span>
+    <span class="ok">transcript_path</span>: ~/.claude/...   <span class="dim"># Where to find evidence</span>
+    <span class="ok">invariants_path</span>: ~/.council/...  <span class="dim"># Path rules to check</span>
+
+    <span class="dim"># For CIRCUIT BREAKER:</span>
+    <span class="warn">worktree</span>: ~/projects/myapp       <span class="dim"># Git repo to check progress</span>
+    <span class="dim"># (Circuit breaker runs when "auto 1" is enabled)</span>
+
+    <span class="dim"># For REVIEW MODE:</span>
+    <span class="dim"># No config needed - it's a manual /inject command</span></pre>
+            </div>
+        </div>
+
+        <div class="info-box" style="margin-top: 1.5rem;">
+            <strong>Key Insight:</strong>
+            <p style="color: #8b949e; margin-top: 0.5rem;">
+                An agent can:
+            </p>
+            <ul style="margin-top: 0.5rem; padding-left: 1.25rem; color: #8b949e;">
+                <li><strong>Pass audit + trip circuit breaker</strong> → Claims are honest but agent is stuck in a loop</li>
+                <li><strong>Pass audit + fail review</strong> → Code works as claimed but has architectural issues</li>
+                <li><strong>Trip circuit breaker + pass review</strong> → Making progress on good code, just needed manual reset</li>
+            </ul>
+            <p style="color: #8b949e; margin-top: 0.5rem;">
+                They're complementary, not redundant.
+            </p>
+        </div>
+    </div>
+</div>
+
+<!-- NOTIFICATION FLOW -->
+<h2>Notifications</h2>
+
+<div class="phase">
+    <div class="phase-header">
+        <div class="phase-number">📱</div>
+        <div class="phase-title">Mac + Phone Notifications</div>
+    </div>
+    <div class="phase-content">
+        <div class="diagram">
+<pre>
+  Agent State Change
+         │
+         ▼
+  ┌──────────────────┐
+  │ Cooldown check   │ (30 seconds per agent)
+  │ last_notify > 30s│
+  └────────┬─────────┘
+           │
+     ┌─────┴─────┐
+     │           │
+    Yes          No
+     │           │
+     ▼           ▼
+  ┌────────┐   <span class="dim">Skip</span>
+  │ Notify │
+  └────┬───┘
+       │
+   ┌───┴───────────────────────────────┐
+   │                                   │
+   ▼                                   ▼
+┌─────────────────────┐    ┌─────────────────────┐
+│ <span class="cmd">terminal-notifier</span>   │    │ <span class="cmd">Pushover API</span>        │
+│ (Mac notification)  │    │ (Phone push)        │
+│                     │    │                     │
+│ "Agent 1 is READY"  │    │ "Agent 1 is READY"  │
+│ "Click to focus"    │    │ Priority: normal    │
+└─────────────────────┘    └─────────────────────┘
+</pre>
+        </div>
+    </div>
+</div>
+
+<!-- SUMMARY -->
+<h2>Full Flow Summary</h2>
+
+<div class="step-grid">
+    <div class="step-card">
+        <h4>1. Input Sources</h4>
+        <p>Voice (FIFO), Telegram, Pushover, direct CLI - all feed into dispatcher</p>
+    </div>
+    <div class="step-card">
+        <h4>2. Task Routing</h4>
+        <p><code>N: command</code> sends to agent N. <code>queue N "task"</code> queues for later.</p>
+    </div>
+    <div class="step-card">
+        <h4>3. State Monitoring</h4>
+        <p>tmux capture every 2s. Detect: ready, working, dialog, missing.</p>
+    </div>
+    <div class="step-card">
+        <h4>4. DONE_REPORT Detection</h4>
+        <p>Tail-bytes search of transcript JSONL. Found = completion signal.</p>
+    </div>
+    <div class="step-card">
+        <h4>5. Auto-Audit</h4>
+        <p>Invariants check + claim verification. Pass = approved. Fail = retry or escalate.</p>
+    </div>
+    <div class="step-card">
+        <h4>6. Queue Dequeue</h4>
+        <p>On approval, send next queued task. Respects circuit breaker.</p>
+    </div>
+    <div class="step-card">
+        <h4>7. Auto-Continue</h4>
+        <p>Sends "continue" to keep agent working. Disabled if DONE_REPORT present or circuit open.</p>
+    </div>
+    <div class="step-card">
+        <h4>8. Circuit Breaker</h4>
+        <p>Git-based progress detection. 3 iterations without git changes = circuit open.</p>
+    </div>
+    <div class="step-card">
+        <h4>9. Loop Guard</h4>
+        <p>Max 1 auto-fix attempt per audit failure. Then escalate to human.</p>
+    </div>
+    <div class="step-card">
+        <h4>10. Sub-Agents</h4>
+        <p>Specialized personas in .claude/agents/. A Claude Code feature, not dispatcher-managed.</p>
+    </div>
+    <div class="step-card">
+        <h4>11. Review Mode</h4>
+        <p>Manual /inject review for adversarial critique. Requires evidence (diff, tests, etc).</p>
+    </div>
+    <div class="step-card">
+        <h4>12. Three QA Systems</h4>
+        <p>Audit (claims match?), Circuit Breaker (progress?), Review (quality?) - independent checks.</p>
+    </div>
+</div>
+
+<div class="info-box success" style="margin-top: 2rem;">
+    <h3 style="color: #3fb950; margin-bottom: 0.75rem;">The One Contract</h3>
+    <p style="font-family: 'SF Mono', monospace; font-size: 0.9rem;">
+        A task is <strong>complete</strong> when ALL are true:<br>
+        &nbsp;&nbsp;1. DONE_REPORT present in transcript<br>
+        &nbsp;&nbsp;2. audit_done verifies claims (if auto_audit enabled)<br>
+        &nbsp;&nbsp;3. check_invariants passes (if configured)<br><br>
+        Everything else (prompt visible, "I'm done" text) is non-authoritative.
+    </p>
+</div>
+
+<div class="info-box" style="margin-top: 1.5rem;">
+    <h3 style="color: #58a6ff; margin-bottom: 0.75rem;">Key Distinctions</h3>
+    <table style="font-size: 0.85rem; color: #c9d1d9; width: 100%;">
+        <tr>
+            <td style="padding: 0.25rem 1rem 0.25rem 0; vertical-align: top;"><strong>Audit vs Circuit Breaker</strong></td>
+            <td>Audit checks honesty. Circuit breaker checks progress. Both can pass/fail independently.</td>
+        </tr>
+        <tr>
+            <td style="padding: 0.25rem 1rem 0.25rem 0; vertical-align: top;"><strong>Auto-Continue vs Queue</strong></td>
+            <td>Queue sends tasks. Auto-continue sends "continue". Queue takes priority.</td>
+        </tr>
+        <tr>
+            <td style="padding: 0.25rem 1rem 0.25rem 0; vertical-align: top;"><strong>Dispatcher vs Sub-Agents</strong></td>
+            <td>Dispatcher manages tmux panes. Sub-agents are personas within Claude Code.</td>
+        </tr>
+        <tr>
+            <td style="padding: 0.25rem 1rem 0.25rem 0; vertical-align: top;"><strong>Approval vs Review</strong></td>
+            <td>Approval is automated (audit pass). Review is manual critique on demand.</td>
+        </tr>
+    </table>
+</div>
+
+</div>
+
+<footer>
+    Council v3 - Voice/Phone Command Router for Claude Code Agents
+</footer>
+
+</body>
+</html>

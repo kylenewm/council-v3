@@ -1,0 +1,28 @@
+scenario:
+  id: "create-hello-world-001"
+  name: "Create Hello World"
+  description: "Agent should create a simple hello world Python script"
+
+  setup: {}
+
+  prompt: "Create a Python file called hello.py that prints 'Hello, World!'"
+
+  verification:
+    files:
+      - path: "hello.py"
+        exists: true
+        contains: "Hello, World!"
+    commands:
+      - cmd: "python3 hello.py"
+        expect_exit_code: 0
+        expect_stdout_contains: "Hello, World!"
+
+  difficulty: trivial
+  tags:
+    - python
+    - beginner
+    - file-creation
+
+  expected_behavior: |
+    The agent should create a simple Python file with a print statement.
+    This is the simplest possible task - just create one file with one line.

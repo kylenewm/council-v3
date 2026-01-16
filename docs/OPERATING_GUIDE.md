@@ -52,6 +52,24 @@ Practical guide for running and using the council multi-agent system.
 /inject status   # Show current mode
 ```
 
+**Mode Precedence (LOCAL overrides GLOBAL):**
+```
+1. .council/mode           (project-local, checked FIRST)
+2. ~/.council/current_inject.txt   (global fallback)
+```
+
+**Set mode for one project only:**
+```bash
+echo "sandbox" > .council/mode
+```
+
+**Set mode globally (all projects):**
+```bash
+echo "strict" > ~/.council/current_inject.txt
+# OR
+/inject strict
+```
+
 ### Enforcement Commands
 ```bash
 # Check for invariant violations
@@ -66,18 +84,96 @@ python scripts/audit_done.py --transcript session.jsonl --json
 ### Dispatcher Commands
 ```bash
 1: <text>        # Send to agent 1
-1: t1 | t2 | t3  # Queue tasks for agent 1
-queue 1          # Show queue
+queue 1 "<task>" # Add task to queue
 clear 1          # Clear queue
 auto 1           # Enable auto-continue
 stop 1           # Disable auto-continue
 reset 1          # Reset circuit breaker
+progress 1 mark  # Manually mark progress (resets streak)
 status           # Show all agents
 ```
 
 ---
 
+## Configuration Reference
+
+All configurable files in one place:
+
+| File | What It Controls | Location |
+|------|------------------|----------|
+| `config.yaml` | Agents, panes, Pushover, Telegram | `~/.council/` |
+| `current_inject.txt` | Active mode (strict/plan/review/sandbox/off) | `~/.council/` |
+| `state.json` | Runtime state (circuits, queues) | `~/.council/` |
+| `auto-inject.sh` | Global rules (always injected) | `~/.council/hooks/` |
+| `strict.sh` | Strict mode injection | `~/.council/hooks/` |
+| `plan.sh` | Plan mode injection | `~/.council/hooks/` |
+| `review.sh` | Review mode injection | `~/.council/hooks/` |
+| `sandbox.sh` | Sandbox mode injection | `~/.council/hooks/` |
+| `invariants.yaml` | Forbidden/protected paths | `.council/` (per-project) |
+| `settings.json` | Hooks, plugins, permissions | `~/.claude/` |
+| `commands/` | Global slash commands | `~/.claude/commands/` |
+| `commands/` | Project-specific commands (overrides global) | `.claude/commands/` |
+
+**How to check current state:**
+```bash
+# Current mode
+cat ~/.council/current_inject.txt
+
+# Project invariants
+cat .council/invariants.yaml
+
+# Dispatcher config
+cat ~/.council/config.yaml
+
+# Runtime state (queues, circuits)
+cat ~/.council/state.json
+```
+
+**Hub/Spoke Architecture:**
+
+Council-v3 is the central hub. Other projects are spokes.
+
+```
+Council-v3 (HUB)
+├── Dispatcher
+├── Scripts (check_invariants.py, audit_done.py)
+├── Templates (hooks, invariants template)
+└── Skills (/enforce, /inject, etc.)
+
+Target Projects (SPOKES)
+├── .council/invariants.yaml (project-specific paths)
+└── .git/hooks/pre-commit (calls council-v3's script)
+```
+
+To add enforcement to a new project:
+```bash
+# From council-v3
+/enforce /path/to/target-project
+```
+
+---
+
 ## Enforcement System
+
+### Authoritative Completion (The One Rule)
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ AUTHORITATIVE COMPLETION (strict mode only)                 │
+│                                                             │
+│ A task is "complete" when ALL are true:                     │
+│   1. DONE_REPORT present in transcript                      │
+│   2. audit_done verifies claims (if auto_audit enabled)     │
+│   3. check_invariants passes (if configured)                │
+│                                                             │
+│ In strict mode: DONE_REPORT is REQUIRED.                    │
+│ If missing, task is marked INCOMPLETE even if agent is      │
+│ "ready". No DONE_REPORT = not done.                         │
+│                                                             │
+│ Everything else (prompt appearing, "I'm done" text,         │
+│ tmux idle) is NON-AUTHORITATIVE.                            │
+└─────────────────────────────────────────────────────────────┘
+```
 
 ### What It Does
 
@@ -148,6 +244,136 @@ python scripts/audit_done.py --transcript session.jsonl --last-n 100
 - `0` - VERIFIED (claims match evidence)
 - `1` - DISCREPANCY (lies detected)
 - `2` - NO_DONE_REPORT (missing report)
+
+### Audit Scope
+
+**audit_done.py VERIFIES:**
+- If DONE_REPORT claims "tests passed", transcript Bash output shows pass
+- If DONE_REPORT claims `changed_files: [x,y]`, git diff output matches
+- If DONE_REPORT claims "invariants: pass", check_invariants output is clean
+
+**audit_done.py DOES NOT:**
+- Run tests itself (post-hoc only)
+- Prove correctness beyond observed evidence
+- Block execution (manual audit only, unless `auto_audit` enabled)
+- Connect to dispatcher or live agents in real-time
+
+---
+
+## Adding Enforcement to Other Projects
+
+### Step-by-Step Setup
+
+**1. Create project config directory:**
+```bash
+mkdir -p .council
+```
+
+**2. Copy invariants template and customize:**
+```bash
+# From council-v3 repo
+cp ~/Downloads/council-v3/.council/invariants.example.yaml .council/invariants.yaml
+```
+
+Edit `.council/invariants.yaml` for your project:
+```yaml
+forbidden_paths:
+  - "*.env"              # Always include
+  - ".env.*"             # Always include
+  - "credentials/*"      # Secrets
+  - "**/api_keys.json"   # Project-specific secrets
+
+protected_paths:
+  - "api/schema.py"      # DB schema - ask before changing
+  - "migrations/*"       # DB migrations - careful
+  - "config/prod*.yaml"  # Production configs
+```
+
+**3. Copy scripts to project (optional):**
+```bash
+cp ~/Downloads/council-v3/scripts/check_invariants.py scripts/
+cp ~/Downloads/council-v3/scripts/audit_done.py scripts/
+```
+
+Or reference them from council-v3 directly.
+
+**4. Add CLAUDE.md to your project:**
+```markdown
+# Project: YourProject
+
+## Before Anything Else
+Read STATE.md. Then read this file.
+
+## Testing
+pytest tests/ -v   # or your test command
+
+## Slash Commands
+| Command | What |
+|---------|------|
+| `/test` | Run tests |
+| `/done` | Verify before complete |
+| `/commit` | Stage and commit |
+```
+
+**5. Set mode globally (affects all Claude sessions):**
+```bash
+/inject strict   # Most projects
+```
+
+### Dynamic Invariants Loading
+
+The strict mode hook **automatically reads your project's `.council/invariants.yaml`** when it exists. No extra config needed.
+
+- If `.council/invariants.yaml` exists → uses your project's paths
+- If missing → falls back to sensible defaults (`.env`, `credentials/*`, etc.)
+
+This means each project can have different forbidden/protected paths, and strict mode adapts automatically.
+
+### Which Mode When
+
+| Situation | Mode | Why |
+|-----------|------|-----|
+| Bug fix in production code | `strict` | Need verification, DONE_REPORT |
+| New feature for shipping | `strict` | Same - real work needs audit trail |
+| Quick experiment / POC | `sandbox` | Fast iteration, fixtures over real APIs |
+| Designing before building | `plan` | Get approval before writing code |
+| Reviewing someone's PR | `review` | Context-blind adversarial review |
+| Documentation only | `off` or `sandbox` | Low risk, no strict overhead |
+
+**Default recommendation:** Start in `strict`. Switch to `sandbox` only for throwaway experiments.
+
+### Best Practices
+
+**DO:**
+- Set up `.council/invariants.yaml` even for small projects (takes 2 min)
+- Add your actual secrets paths to forbidden (grep for `.env`, `credentials`, `secret`)
+- Add schema/migration files to protected (not forbidden - sometimes you need them)
+- Run `/inject status` to confirm your mode before starting work
+- End tasks with DONE_REPORT in strict mode (audit will catch if you forget)
+
+**DON'T:**
+- Put everything in forbidden - use protected for "ask first" files
+- Switch modes mid-task - finish current work first
+- Skip invariants.yaml "because it's a small project" - that's when mistakes happen
+- Ignore audit failures - if it says DISCREPANCY, investigate
+
+### Minimal Setup (2 minutes)
+
+For projects where you just want basic protection:
+
+```bash
+# In your project root
+mkdir -p .council
+cat > .council/invariants.yaml << 'EOF'
+forbidden_paths:
+  - "*.env"
+  - ".env.*"
+  - "**/secrets.*"
+  - "**/credentials.*"
+EOF
+```
+
+That's it. Strict mode will now block changes to any env/secrets files in this project.
 
 ---
 

@@ -1,0 +1,9 @@
+# Minimal scenario - just required fields
+scenario:
+  id: "minimal-001"
+  name: "Minimal test scenario"
+  prompt: "Do something"
+  verification:
+    commands:
+      - cmd: "echo done"
+        expect_exit_code: 0

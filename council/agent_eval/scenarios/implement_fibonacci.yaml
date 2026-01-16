@@ -1,0 +1,89 @@
+scenario:
+  id: "implement-fibonacci-001"
+  name: "Implement Fibonacci with Memoization"
+  description: "Agent should implement an efficient fibonacci function"
+
+  setup:
+    files:
+      - path: "fib.py"
+        content: |
+          """Fibonacci module - implement the fibonacci function below."""
+
+          def fibonacci(n: int) -> int:
+              """Return the nth Fibonacci number.
+
+              Args:
+                  n: The position in the Fibonacci sequence (0-indexed)
+
+              Returns:
+                  The nth Fibonacci number
+
+              Raises:
+                  ValueError: If n is negative
+
+              Examples:
+                  >>> fibonacci(0)
+                  0
+                  >>> fibonacci(1)
+                  1
+                  >>> fibonacci(10)
+                  55
+              """
+              # TODO: Implement this function efficiently
+              pass
+      - path: "test_fib.py"
+        content: |
+          import pytest
+          from fib import fibonacci
+
+          def test_fibonacci_base_cases():
+              assert fibonacci(0) == 0
+              assert fibonacci(1) == 1
+
+          def test_fibonacci_small_numbers():
+              assert fibonacci(5) == 5
+              assert fibonacci(10) == 55
+
+          def test_fibonacci_larger_numbers():
+              assert fibonacci(20) == 6765
+              assert fibonacci(30) == 832040
+
+          def test_fibonacci_negative():
+              with pytest.raises(ValueError):
+                  fibonacci(-1)
+
+          def test_fibonacci_performance():
+              # Should complete in reasonable time (no naive recursion)
+              result = fibonacci(40)
+              assert result == 102334155
+
+  prompt: |
+    Implement the fibonacci function in fib.py.
+    The implementation must:
+    1. Handle base cases (n=0 returns 0, n=1 returns 1)
+    2. Raise ValueError for negative inputs
+    3. Be efficient enough to compute fibonacci(40) quickly
+    All tests in test_fib.py must pass.
+
+  verification:
+    commands:
+      - cmd: "python3 -m pytest test_fib.py -v"
+        expect_exit_code: 0
+
+  difficulty: medium
+  tags:
+    - python
+    - algorithm
+    - memoization
+    - tdd
+
+  timeout_override: 60
+
+  expected_behavior: |
+    The agent should implement fibonacci using memoization or iteration.
+    A naive recursive implementation will timeout on fibonacci(40).
+
+  watchdog_questions:
+    - "Is the implementation efficient?"
+    - "Did the agent use memoization or iteration?"
+    - "Is the code clean and readable?"

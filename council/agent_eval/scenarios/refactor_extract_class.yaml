@@ -1,0 +1,124 @@
+scenario:
+  id: "refactor-extract-class-001"
+  name: "Refactor: Extract Class"
+  description: "Agent should extract a class from a large function to improve maintainability"
+
+  setup:
+    files:
+      - path: "order_processor.py"
+        content: |
+          """Order processing module with a large function that should be refactored."""
+
+          def process_order(order_data: dict) -> dict:
+              """Process an order - too many responsibilities in one function."""
+
+              # Validation
+              if not order_data.get("customer_id"):
+                  raise ValueError("Missing customer_id")
+              if not order_data.get("items"):
+                  raise ValueError("No items in order")
+              if not isinstance(order_data.get("items"), list):
+                  raise ValueError("Items must be a list")
+              for item in order_data["items"]:
+                  if not item.get("sku"):
+                      raise ValueError("Item missing SKU")
+                  if not item.get("quantity") or item["quantity"] < 1:
+                      raise ValueError("Invalid quantity")
+                  if not item.get("price") or item["price"] < 0:
+                      raise ValueError("Invalid price")
+
+              # Calculate totals
+              subtotal = sum(item["quantity"] * item["price"] for item in order_data["items"])
+              tax_rate = 0.08
+              tax = subtotal * tax_rate
+              shipping = 5.99 if subtotal < 50 else 0
+              total = subtotal + tax + shipping
+
+              # Build result
+              return {
+                  "customer_id": order_data["customer_id"],
+                  "items": order_data["items"],
+                  "subtotal": round(subtotal, 2),
+                  "tax": round(tax, 2),
+                  "shipping": round(shipping, 2),
+                  "total": round(total, 2),
+                  "status": "processed"
+              }
+      - path: "test_order.py"
+        content: |
+          import pytest
+          from order_processor import process_order
+
+          def test_valid_order():
+              order = {
+                  "customer_id": "C123",
+                  "items": [
+                      {"sku": "ITEM1", "quantity": 2, "price": 10.00},
+                      {"sku": "ITEM2", "quantity": 1, "price": 25.00}
+                  ]
+              }
+              result = process_order(order)
+              assert result["subtotal"] == 45.00
+              assert result["tax"] == 3.60
+              assert result["shipping"] == 5.99
+              assert result["total"] == 54.59
+
+          def test_free_shipping():
+              order = {
+                  "customer_id": "C456",
+                  "items": [
+                      {"sku": "ITEM3", "quantity": 5, "price": 15.00}
+                  ]
+              }
+              result = process_order(order)
+              assert result["subtotal"] == 75.00
+              assert result["shipping"] == 0
+
+          def test_missing_customer_id():
+              with pytest.raises(ValueError, match="Missing customer_id"):
+                  process_order({"items": []})
+
+          def test_empty_items():
+              with pytest.raises(ValueError, match="No items"):
+                  process_order({"customer_id": "C123", "items": []})
+
+          def test_invalid_quantity():
+              with pytest.raises(ValueError, match="Invalid quantity"):
+                  process_order({
+                      "customer_id": "C123",
+                      "items": [{"sku": "X", "quantity": 0, "price": 10}]
+                  })
+
+  prompt: |
+    Refactor order_processor.py by extracting an OrderValidator class.
+    The class should handle all validation logic separately.
+    The process_order function should use this class.
+    All existing tests must still pass.
+
+  verification:
+    files:
+      - path: "order_processor.py"
+        exists: true
+        contains: "class OrderValidator"
+    commands:
+      - cmd: "python3 -m pytest test_order.py -v"
+        expect_exit_code: 0
+
+  difficulty: hard
+  tags:
+    - python
+    - refactoring
+    - design-patterns
+    - tdd
+
+  expected_behavior: |
+    The agent should:
+    1. Create an OrderValidator class with validation methods
+    2. Move validation logic from process_order into the class
+    3. Keep process_order working but delegating to the validator
+    4. Ensure all tests still pass
+
+  watchdog_questions:
+    - "Is the refactoring clean and well-structured?"
+    - "Did the agent maintain backwards compatibility?"
+    - "Is the new class properly encapsulated?"

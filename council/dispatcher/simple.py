@@ -16,15 +16,16 @@ Usage:
     python -m council.dispatcher.simple [config.yaml]
 
 Commands:
-    1: <text>    Send <text> to agent 1
-    1: t1 | t2   Send t1 now, queue t2 for later
-    queue 1      Show queue for agent 1
-    clear 1      Clear queue for agent 1
-    auto 1       Enable auto-continue for agent 1
-    stop 1       Disable auto-continue for agent 1
-    reset 1      Reset circuit breaker for agent 1
-    status       Show agent status
-    quit         Exit
+    1: <text>        Send <text> to agent 1
+    queue 1 "<task>" Add <task> to agent 1's queue
+    queue 1          Show queue for agent 1
+    clear 1          Clear queue for agent 1
+    auto 1           Enable auto-continue for agent 1
+    stop 1           Disable auto-continue for agent 1
+    reset 1          Reset circuit breaker for agent 1
+    progress 1 mark  Manually mark progress (resets streak)
+    status           Show agent status
+    quit             Exit
 """
 
 import json
@@ -124,10 +125,24 @@ class Agent:
     last_snapshot: Optional[GitSnapshot] = None
     # Task queue
     task_queue: list[str] = field(default_factory=list)
+    # DONE_REPORT detection (transcript watching)
+    transcript_path: Optional[Path] = None  # Path to Claude session JSONL
+    last_transcript_offset: int = 0  # Byte offset for incremental reads
+    last_transcript_size: int = 0  # For rotation detection
+    last_done_report_ts: Optional[float] = None  # When last DONE_REPORT was detected
+    awaiting_done_report: bool = False  # True after task sent in strict mode
+    # Auto-audit
+    auto_audit: bool = False  # Run audit automatically on DONE_REPORT
+    invariants_path: Optional[Path] = None  # Path to invariants.yaml
+    audit_fail_streak: int = 0  # Track consecutive audit failures
+    last_audit_task_id: Optional[str] = None  # Hash of last audited task
+    mode: str = "default"  # "strict", "sandbox", "plan", "review", or "default"
 
 
 NOTIFY_COOLDOWN = 30.0  # Seconds between notifications per agent
 MAX_NO_PROGRESS = 3  # Open circuit after this many iterations without progress
+TAIL_BYTES = 500_000  # 500KB tail window for DONE_REPORT detection
+MAX_AUDIT_RETRIES = 1  # Only auto-queue "fix audit issues" once per task
 
 
 @dataclass
@@ -165,13 +180,21 @@ class PushoverClient:
 
 def save_state(config: Config):
     """Save agent state to JSON file."""
-    state = {"version": 2, "agents": {}}
+    state = {"version": 3, "agents": {}}
     for agent_id, agent in config.agents.items():
         state["agents"][str(agent_id)] = {
             "auto_enabled": agent.auto_enabled,
             "circuit_state": agent.circuit_state,
             "no_progress_streak": agent.no_progress_streak,
             "task_queue": agent.task_queue,
+            # Transcript watching state
+            "last_transcript_offset": agent.last_transcript_offset,
+            "last_transcript_size": agent.last_transcript_size,
+            "last_done_report_ts": agent.last_done_report_ts,
+            "awaiting_done_report": agent.awaiting_done_report,
+            # Auto-audit state
+            "audit_fail_streak": agent.audit_fail_streak,
+            "last_audit_task_id": agent.last_audit_task_id,
         }
     with _state_lock:
         try:
@@ -198,6 +221,14 @@ def load_state(config: Config):
                     agent.circuit_state = agent_state.get("circuit_state", "closed")
                     agent.no_progress_streak = agent_state.get("no_progress_streak", 0)
                     agent.task_queue = agent_state.get("task_queue", [])
+                    # Transcript watching state
+                    agent.last_transcript_offset = agent_state.get("last_transcript_offset", 0)
+                    agent.last_transcript_size = agent_state.get("last_transcript_size", 0)
+                    agent.last_done_report_ts = agent_state.get("last_done_report_ts")
+                    agent.awaiting_done_report = agent_state.get("awaiting_done_report", False)
+                    # Auto-audit state
+                    agent.audit_fail_streak = agent_state.get("audit_fail_streak", 0)
+                    agent.last_audit_task_id = agent_state.get("last_audit_task_id")
             print(f"[STATE] Restored from {STATE_FILE}")
         except Exception as e:
             print(f"[WARN] Could not load state: {e}")
@@ -227,6 +258,167 @@ TASK="{safe_task}"
         CURRENT_TASK_FILE.write_text(content)
     except Exception as e:
         print(f"[WARN] Could not write current task: {e}")
+
+
+# --- DONE_REPORT Detection ---
+
+def check_done_report(agent: Agent) -> bool:
+    """Check if DONE_REPORT appears in transcript since last check.
+
+    Uses tail-bytes search to reliably find DONE_REPORT even with verbose output.
+    Handles file rotation/truncation.
+
+    Returns True if DONE_REPORT found, False otherwise.
+    """
+    if not agent.transcript_path or not agent.transcript_path.exists():
+        return False  # No transcript configured → N/A
+
+    try:
+        size = agent.transcript_path.stat().st_size
+
+        # Handle file rotation/truncation
+        if size < agent.last_transcript_size:
+            agent.last_transcript_offset = 0
+
+        # Read from tail window (not just since last offset)
+        start = max(0, size - TAIL_BYTES)
+        with open(agent.transcript_path, 'rb') as f:
+            f.seek(start)
+            content = f.read().decode('utf-8', errors='ignore')
+
+        if 'DONE_REPORT' in content:
+            agent.awaiting_done_report = False
+            agent.last_done_report_ts = time.time()
+            agent.last_transcript_offset = size
+            agent.last_transcript_size = size
+            return True
+
+        agent.last_transcript_size = size
+        return False
+    except Exception as e:
+        # Log but don't crash on transcript read errors
+        return False
+
+
+def format_done_status(agent: Agent) -> str:
+    """Format DONE_REPORT status for status display.
+
+    Returns:
+        - "[DONE ✓ Xm ago]" if DONE_REPORT found recently
+        - "[awaiting DONE_REPORT]" if waiting for completion
+        - "[DONE: N/A]" if no transcript configured
+    """
+    if not agent.transcript_path:
+        return "[DONE: N/A]"
+
+    if agent.awaiting_done_report:
+        return "[awaiting DONE_REPORT]"
+
+    if agent.last_done_report_ts:
+        elapsed = time.time() - agent.last_done_report_ts
+        if elapsed < 60:
+            return f"[DONE ✓ {int(elapsed)}s ago]"
+        elif elapsed < 3600:
+            return f"[DONE ✓ {int(elapsed / 60)}m ago]"
+        else:
+            return f"[DONE ✓ {int(elapsed / 3600)}h ago]"
+
+    return ""  # No DONE_REPORT detected yet
+
+
+def run_auto_audit(agent: Agent, config: Config) -> Optional[str]:
+    """Run auto-audit on DONE_REPORT if configured.
+
+    Returns status string or None if no action taken.
+    Implements loop guard to prevent infinite "fix audit issues" cycles.
+    """
+    import hashlib
+    import subprocess as audit_subprocess
+
+    if not agent.transcript_path:
+        return None
+
+    # Compute task_id from current state (for loop guard)
+    task_id = hashlib.sha256(
+        f"{agent.transcript_path}:{agent.last_done_report_ts}".encode()
+    ).hexdigest()[:16]
+
+    # Run invariants check if configured
+    invariants_passed = True
+    invariants_output = ""
+    if agent.invariants_path and agent.invariants_path.exists() and agent.worktree:
+        try:
+            result = audit_subprocess.run(
+                [
+                    sys.executable,
+                    str(Path(__file__).parent.parent.parent / "scripts" / "check_invariants.py"),
+                    "--diff", "HEAD~1",
+                    "--invariants", str(agent.invariants_path),
+                    "--repo", str(agent.worktree),
+                ],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            invariants_passed = result.returncode == 0
+            invariants_output = result.stdout
+        except Exception as e:
+            invariants_output = f"invariants check error: {e}"
+
+    # Run audit_done.py
+    audit_passed = True
+    audit_output = ""
+    try:
+        result = audit_subprocess.run(
+            [
+                sys.executable,
+                str(Path(__file__).parent.parent.parent / "scripts" / "audit_done.py"),
+                "--transcript", str(agent.transcript_path),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        audit_passed = result.returncode == 0
+        audit_output = result.stdout
+    except Exception as e:
+        audit_output = f"audit error: {e}"
+        audit_passed = False
+
+    # Determine verdict
+    if invariants_passed and audit_passed:
+        agent.audit_fail_streak = 0
+        notify(f"✅ {agent.name}: APPROVED", config)
+        log_event(agent.id, "audit_approved", agent.pane_id)
+        return "APPROVED"
+
+    # Handle failure with loop guard
+    if task_id != agent.last_audit_task_id:
+        # New task, reset counter
+        agent.last_audit_task_id = task_id
+        agent.audit_fail_streak = 1
+    else:
+        agent.audit_fail_streak += 1
+
+    if agent.audit_fail_streak <= MAX_AUDIT_RETRIES:
+        # Auto-queue fix task
+        reasons = []
+        if not invariants_passed:
+            reasons.append(f"invariants failed: {invariants_output[:100]}")
+        if not audit_passed:
+            reasons.append(f"audit failed: {audit_output[:100]}")
+        fix_task = f"Fix audit issues: {'; '.join(reasons)}"
+        agent.task_queue.append(fix_task)
+        save_state(config)
+        notify(f"❌ {agent.name}: REJECTED - queued fix task", config)
+        log_event(agent.id, "audit_rejected", agent.pane_id, extra={"reasons": reasons})
+        return f"REJECTED (fix queued, streak={agent.audit_fail_streak})"
+    else:
+        # Cap reached, notify human
+        notify(f"❌ {agent.name}: REQUIRES HUMAN - audit failed {agent.audit_fail_streak} times", config)
+        log_event(agent.id, "audit_requires_human", agent.pane_id,
+                  extra={"streak": agent.audit_fail_streak})
+        return f"REQUIRES HUMAN (failed {agent.audit_fail_streak} times)"
 
 
 # --- Pattern Detection ---
@@ -607,11 +799,21 @@ def load_config(path: Path) -> Config:
         worktree = None
         if agent_cfg.get("worktree"):
             worktree = Path(os.path.expanduser(agent_cfg["worktree"]))
+        transcript_path = None
+        if agent_cfg.get("transcript_path"):
+            transcript_path = Path(os.path.expanduser(agent_cfg["transcript_path"]))
+        invariants_path = None
+        if agent_cfg.get("invariants_path"):
+            invariants_path = Path(os.path.expanduser(agent_cfg["invariants_path"]))
         agents[int(agent_id)] = Agent(
             id=int(agent_id),
             pane_id=agent_cfg.get("pane_id", ""),
             name=agent_cfg.get("name", f"Agent {agent_id}"),
             worktree=worktree,
+            transcript_path=transcript_path,
+            auto_audit=agent_cfg.get("auto_audit", False),
+            invariants_path=invariants_path,
+            mode=agent_cfg.get("mode", "default"),
         )
 
     fifo_path = None
@@ -663,6 +865,17 @@ def check_agents(config: Config) -> list[str]:
 
                 if new_state == "ready":
                     changes.append(f"{agent.name} is READY")
+
+                    # Check for DONE_REPORT in transcript
+                    done_report_found = check_done_report(agent)
+                    if done_report_found:
+                        changes.append(f"  -> DONE_REPORT detected")
+
+                        # Run auto-audit if configured
+                        if agent.auto_audit and agent.mode == "strict":
+                            audit_result = run_auto_audit(agent, config)
+                            if audit_result:
+                                changes.append(f"  -> audit: {audit_result}")
 
                     # Check progress via git (if we have a previous snapshot)
                     if agent.worktree and agent.last_snapshot:
@@ -743,6 +956,16 @@ def show_status(config: Config):
             extras.append("CIRCUIT OPEN")
         if agent.task_queue:
             extras.append(f"Q:{len(agent.task_queue)}")
+
+        # DONE_REPORT status
+        done_status = format_done_status(agent)
+        if done_status:
+            extras.append(done_status)
+
+        # Mode indicator
+        if agent.mode != "default":
+            extras.append(f"mode:{agent.mode}")
+
         extras_str = f" [{' '.join(extras)}]" if extras else ""
 
         print(f"  {agent.id}: {agent.name} [{agent.pane_id}] - {status}{extras_str}")
@@ -784,13 +1007,23 @@ def parse_command(line: str) -> tuple[Optional[int], Optional[str]]:
         return int(reset_match.group(1)), "reset"
 
     # Queue management commands
-    queue_match = re.match(r"^queue\s+(\d+)$", line, re.IGNORECASE)
-    if queue_match:
-        return int(queue_match.group(1)), "queue"
+    queue_show_match = re.match(r"^queue\s+(\d+)$", line, re.IGNORECASE)
+    if queue_show_match:
+        return int(queue_show_match.group(1)), "queue"
+
+    # Queue add: queue 1 "task" or queue 1 'task'
+    queue_add_match = re.match(r'^queue\s+(\d+)\s+["\'](.+)["\']$', line, re.IGNORECASE)
+    if queue_add_match:
+        return int(queue_add_match.group(1)), ("queue_add", queue_add_match.group(2))
 
     clear_match = re.match(r"^clear\s+(\d+)$", line, re.IGNORECASE)
     if clear_match:
         return int(clear_match.group(1)), "clear"
+
+    # Progress mark: progress 1 mark
+    progress_match = re.match(r"^progress\s+(\d+)\s+mark$", line, re.IGNORECASE)
+    if progress_match:
+        return int(progress_match.group(1)), "progress_mark"
 
     # Agent command: "1: do something"
     match = re.match(r"^(\d+)[:\s]+(.+)$", line)
@@ -812,15 +1045,16 @@ def process_line(line: str, config: Config) -> bool:
         show_status(config)
     elif command == "help":
         print("\nCommands:")
-        print("  1: <text>     - Send <text> to agent 1")
-        print("  1: t1 | t2    - Send t1 now, queue t2 for later")
-        print("  queue 1       - Show queue for agent 1")
-        print("  clear 1       - Clear queue for agent 1")
-        print("  auto 1        - Enable auto-continue for agent 1")
-        print("  stop 1        - Disable auto-continue for agent 1")
-        print("  reset 1       - Reset circuit breaker for agent 1")
-        print("  status        - Show agent status")
-        print("  quit          - Exit\n")
+        print('  1: <text>        - Send <text> to agent 1')
+        print('  queue 1 "<task>" - Add <task> to agent 1\'s queue')
+        print("  queue 1          - Show queue for agent 1")
+        print("  clear 1          - Clear queue for agent 1")
+        print("  auto 1           - Enable auto-continue for agent 1")
+        print("  stop 1           - Disable auto-continue for agent 1")
+        print("  reset 1          - Reset circuit breaker for agent 1")
+        print("  progress 1 mark  - Manually mark progress (resets streak)")
+        print("  status           - Show agent status")
+        print("  quit             - Exit\n")
     elif command == "auto" and agent_id is not None:
         agent = config.agents.get(agent_id)
         if not agent:
@@ -870,6 +1104,28 @@ def process_line(line: str, config: Config) -> bool:
             agent.task_queue.clear()
             print(f"{agent.name}: cleared {cleared} queued tasks")
             save_state(config)
+    elif isinstance(command, tuple) and command[0] == "queue_add" and agent_id is not None:
+        task = command[1]
+        agent = config.agents.get(agent_id)
+        if not agent:
+            print(f"Unknown agent: {agent_id}")
+        else:
+            agent.task_queue.append(task)
+            print(f"{agent.name}: queued task ({len(agent.task_queue)} total)")
+            print(f"  -> {task[:60]}{'...' if len(task) > 60 else ''}")
+            save_state(config)
+    elif command == "progress_mark" and agent_id is not None:
+        agent = config.agents.get(agent_id)
+        if not agent:
+            print(f"Unknown agent: {agent_id}")
+        else:
+            # Mark progress manually - reset streak and update snapshot
+            if agent.worktree:
+                agent.last_snapshot = take_snapshot(agent.worktree)
+            agent.no_progress_streak = 0
+            log_event(agent.id, "progress_mark", agent.pane_id)
+            print(f"{agent.name}: progress marked (streak reset)")
+            save_state(config)
     elif agent_id is not None and command:
         agent = config.agents.get(agent_id)
         if not agent:
@@ -879,27 +1135,14 @@ def process_line(line: str, config: Config) -> bool:
         elif tmux_pane_in_copy_mode(agent.pane_id):
             print(f"{agent.name}: in scroll mode, exit first (q)")
         else:
-            # Split pipe-separated tasks
-            tasks = [t.strip() for t in command.split("|") if t.strip()]
-            if not tasks:
-                print(f"No valid tasks in command")
-                return True
-            first_task = tasks[0]
-            remaining = tasks[1:]
-
+            # Send command directly (no pipe splitting - use 'queue N' for multiple tasks)
             if agent.worktree:
                 agent.last_snapshot = take_snapshot(agent.worktree)
-            if send_to_agent(agent, first_task, config):
+            if send_to_agent(agent, command, config):
                 if not config.dry_run:
-                    print(f"-> {agent.name}: {first_task[:50]}...")
+                    print(f"-> {agent.name}: {command[:50]}...")
                 agent.state = "working"
-                write_current_task(agent, first_task)
-
-                # Queue remaining tasks
-                if remaining:
-                    agent.task_queue.extend(remaining)
-                    print(f"   [{len(remaining)} tasks queued]")
-                    save_state(config)
+                write_current_task(agent, command)
             else:
                 print(f"Failed to send to {agent.name}")
     elif line.strip():

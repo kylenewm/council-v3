@@ -16,7 +16,8 @@ Voice/phone command router for multiple Claude Code agents in tmux panes.
 
 ## Before Anything Else
 
-Read STATE.md for current status.
+1. Read `docs/SYSTEM_REFERENCE.md` - Full system overview (modes, commands, plugins)
+2. Read `STATE.md` - Current work status
 
 ---
 
@@ -50,12 +51,13 @@ pytest tests/ -v
 | Command | What |
 |---------|------|
 | `1: <text>` | Send text to agent 1 |
-| `1: t1 \| t2` | Send t1 now, queue t2 for later |
+| `queue 1 "<task>"` | Add task to agent 1's queue |
 | `queue 1` | Show queue for agent 1 |
 | `clear 1` | Clear queue for agent 1 |
 | `auto 1` | Enable auto-continue for agent 1 |
 | `stop 1` | Disable auto-continue |
 | `reset 1` | Reset circuit breaker |
+| `progress 1 mark` | Manually mark progress (resets streak) |
 | `status` | Show all agents (includes Q:N for queue depth) |
 | `quit` | Exit |
 
@@ -75,8 +77,7 @@ pytest tests/ -v
 - Agents with open circuit don't auto-continue
 
 ### Task Queue
-- Send multiple tasks: `1: task1 | task2 | task3`
-- First task sent immediately, rest queued
+- Add tasks explicitly: `queue 1 "task text"`
 - Dequeues automatically when agent becomes ready
 - Queue takes priority over auto-continue
 - Respects circuit breaker (no dequeue if open)
@@ -206,6 +207,8 @@ After completing work on council-v3, optionally note friction in REFLECTIONS.md:
 After completing current work, pick from this queue:
 
 1. **Cross-agent visibility** - See what other agents produced
-2. **Refactor simple.py** - 955 lines is unwieldy, split into modules
+2. **Refactor simple.py** - 1400+ lines is unwieldy, split into modules
 3. **Voice command parsing** - Better handling of complex multi-step voice input
 4. **Status dashboard** - Web or TUI view of all agent states
+5. **Jungle Gym web dashboard** - Real-time visual of E2E tests running, historical results, charts
+6. **Auto-config from task description** - Infer strict/sandbox/plan mode from task text

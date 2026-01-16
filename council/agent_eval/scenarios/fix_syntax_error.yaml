@@ -1,0 +1,34 @@
+scenario:
+  id: "fix-syntax-error-001"
+  name: "Fix Python Syntax Error"
+  description: "Agent should fix a missing colon in a function definition"
+
+  setup:
+    files:
+      - path: "broken.py"
+        content: |
+          def greet(name)
+              return f"Hello, {name}!"
+
+          if __name__ == "__main__":
+              print(greet("World"))
+
+  prompt: "Fix the syntax error in broken.py so it runs correctly."
+
+  verification:
+    commands:
+      - cmd: "python3 -m py_compile broken.py"
+        expect_exit_code: 0
+      - cmd: "python3 broken.py"
+        expect_exit_code: 0
+        expect_stdout_contains: "Hello, World!"
+
+  difficulty: trivial
+  tags:
+    - python
+    - syntax-error
+    - beginner
+
+  expected_behavior: |
+    The agent should add the missing colon after 'def greet(name)'.
+    This is a minimal fix - just add ':' at the end of line 1.

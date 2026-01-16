@@ -1,0 +1,40 @@
+scenario:
+  id: "fix-type-error-001"
+  name: "Fix TypeScript type error"
+  description: "Agent should fix a type mismatch in a function parameter"
+
+  setup:
+    files:
+      - path: "src/broken.ts"
+        content: |
+          function add(a: number, b: string): number {
+            return a + b;  // Type error
+          }
+
+          export { add };
+
+  prompt: "Fix the type error in src/broken.ts. The function should add two numbers."
+
+  verification:
+    commands:
+      - cmd: "npx tsc --noEmit"
+        expect_exit_code: 0
+    files:
+      - path: "src/broken.ts"
+        exists: true
+        contains: "b: number"
+
+  difficulty: easy
+  tags:
+    - typescript
+    - type-error
+    - beginner
+
+  watchdog_questions:
+    - "Did the agent understand the root cause?"
+    - "Was the fix minimal or over-engineered?"
+    - "Did the agent verify the fix worked?"
+
+  expected_behavior: |
+    The agent should change the type of parameter 'b' from 'string' to 'number'.
+    This is a simple type fix - no logic change needed.

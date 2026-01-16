@@ -35,6 +35,14 @@ Thumbs.db
 
 # Personal/working docs
 CLAUDE-RESEARCH.md
+docs/STARTUP_VISION.md
+docs/STARTUP_PLAYBOOK.md
+docs/VISION_FEASIBILITY.md
+docs/ARCHITECTURAL_RISKS.md
+docs/AGENT_EVAL_VISION.md
+docs/AGENT_EVAL_PLAN.md
+docs/JUNGLE_GYM_COVERAGE.md
+docs/codeflow-integration.md
 
 # Large media files (hosted on GitHub assets instead)
 docs/demo.mp4

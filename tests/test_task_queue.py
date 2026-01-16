@@ -62,29 +62,27 @@ class TestTaskQueueExecution:
     def config_with_queue(self, agent_ready):
         return Config(agents={1: agent_ready})
 
-    def test_queue_populated_on_pipe_command(self):
-        """Pipe command should populate queue."""
+    def test_queue_add_command(self):
+        """queue N 'task' should add task to queue."""
         agent = Agent(id=1, pane_id="%0", name="Test", state="ready")
         config = Config(agents={1: agent})
 
-        with patch("council.dispatcher.simple.tmux_send", return_value=True):
-            with patch("council.dispatcher.simple.tmux_pane_in_copy_mode", return_value=False):
-                with patch("council.dispatcher.simple.save_state"):
-                    process_line("1: task1 | task2 | task3", config)
+        with patch("council.dispatcher.simple.save_state"):
+            process_line('queue 1 "task to queue"', config)
 
-        assert agent.task_queue == ["task2", "task3"]
+        assert agent.task_queue == ["task to queue"]
 
-    def test_first_task_sent_immediately(self):
-        """First task should be sent immediately."""
+    def test_command_with_pipe_sent_literally(self):
+        """Command containing pipe characters should be sent literally (no splitting)."""
         agent = Agent(id=1, pane_id="%0", name="Test", state="ready")
         config = Config(agents={1: agent})
 
         with patch("council.dispatcher.simple.tmux_send", return_value=True) as mock_send:
             with patch("council.dispatcher.simple.tmux_pane_in_copy_mode", return_value=False):
-                with patch("council.dispatcher.simple.save_state"):
-                    process_line("1: task1 | task2", config)
+                process_line("1: grep 'foo|bar' file.txt", config)
 
-        mock_send.assert_called_with("%0", "task1")
+        # Entire command with pipe should be sent (not split)
+        mock_send.assert_called_with("%0", "grep 'foo|bar' file.txt")
 
     def test_single_task_no_queue(self):
         """Single task should not populate queue."""
@@ -153,7 +151,7 @@ class TestTaskQueuePersistence:
 
             state = json.loads((tmp_path / "state.json").read_text())
             assert state["agents"]["1"]["task_queue"] == ["a", "b"]
-            assert state["version"] == 2
+            assert state["version"] == 3
 
     def test_queue_restored_from_state(self, tmp_path):
         """Queue should be restored from state file."""
@@ -259,41 +257,36 @@ class TestTaskQueueStatus:
 class TestTaskQueueEdgeCases:
     """Test edge cases."""
 
-    def test_empty_tasks_filtered(self):
-        """Empty tasks between pipes are filtered."""
+    def test_queue_add_single_quotes(self):
+        """queue N 'task' should work with single quotes."""
         agent = Agent(id=1, pane_id="%0", name="Test", state="ready")
         config = Config(agents={1: agent})
 
-        with patch("council.dispatcher.simple.tmux_send", return_value=True):
-            with patch("council.dispatcher.simple.tmux_pane_in_copy_mode", return_value=False):
-                with patch("council.dispatcher.simple.save_state"):
-                    process_line("1: task1 |  | task2", config)
+        with patch("council.dispatcher.simple.save_state"):
+            process_line("queue 1 'another task'", config)
 
-        assert agent.task_queue == ["task2"]
+        assert agent.task_queue == ["another task"]
 
-    def test_whitespace_trimmed(self):
-        """Whitespace around tasks is trimmed."""
+    def test_queue_add_multiple(self):
+        """Multiple queue commands should accumulate tasks."""
         agent = Agent(id=1, pane_id="%0", name="Test", state="ready")
         config = Config(agents={1: agent})
 
-        with patch("council.dispatcher.simple.tmux_send", return_value=True):
-            with patch("council.dispatcher.simple.tmux_pane_in_copy_mode", return_value=False):
-                with patch("council.dispatcher.simple.save_state"):
-                    process_line("1:   task1  |  task2  ", config)
+        with patch("council.dispatcher.simple.save_state"):
+            process_line('queue 1 "task1"', config)
+            process_line('queue 1 "task2"', config)
 
-        assert agent.task_queue == ["task2"]
+        assert agent.task_queue == ["task1", "task2"]
 
-    def test_queue_survives_failed_send(self):
-        """Queue not modified if send fails."""
+    def test_queue_add_preserves_pipes_in_task(self):
+        """queue N 'task with | pipe' should preserve pipes in task text."""
         agent = Agent(id=1, pane_id="%0", name="Test", state="ready")
         config = Config(agents={1: agent})
 
-        with patch("council.dispatcher.simple.tmux_send", return_value=False):
-            with patch("council.dispatcher.simple.tmux_pane_in_copy_mode", return_value=False):
-                process_line("1: task1 | task2", config)
+        with patch("council.dispatcher.simple.save_state"):
+            process_line('queue 1 "grep foo|bar file.txt"', config)
 
-        # Queue should not be populated since first task failed
-        assert agent.task_queue == []
+        assert agent.task_queue == ["grep foo|bar file.txt"]
 
     def test_dequeue_failure_keeps_task(self):
         """Task stays in queue if dequeue send fails."""
@@ -310,29 +303,27 @@ class TestTaskQueueEdgeCases:
         # Task should still be in queue since send failed
         assert agent.task_queue == ["task2", "task3"]
 
-    def test_empty_pipe_command(self, capsys):
-        """Empty pipes should be handled gracefully."""
-        agent = Agent(id=1, pane_id="%0", name="Test", state="ready")
+    def test_progress_mark_command(self, capsys):
+        """progress N mark should reset streak and mark progress."""
+        agent = Agent(id=1, pane_id="%0", name="Test", state="ready", no_progress_streak=2)
         config = Config(agents={1: agent})
 
-        with patch("council.dispatcher.simple.tmux_pane_in_copy_mode", return_value=False):
-            result = process_line("1: | | ", config)
+        with patch("council.dispatcher.simple.save_state"):
+            with patch("council.dispatcher.simple.log_event"):
+                process_line("progress 1 mark", config)
 
-        assert result is True  # Should not crash
+        assert agent.no_progress_streak == 0
         out = capsys.readouterr().out
-        assert "No valid tasks" in out
+        assert "progress marked" in out
 
-    def test_only_whitespace_tasks(self, capsys):
-        """Tasks that are only whitespace should be filtered."""
-        agent = Agent(id=1, pane_id="%0", name="Test", state="ready")
-        config = Config(agents={1: agent})
+    def test_progress_mark_unknown_agent(self, capsys):
+        """progress N mark with unknown agent shows error."""
+        config = Config(agents={})
 
-        with patch("council.dispatcher.simple.tmux_pane_in_copy_mode", return_value=False):
-            result = process_line("1:    |   |   ", config)
+        process_line("progress 99 mark", config)
 
-        assert result is True
         out = capsys.readouterr().out
-        assert "No valid tasks" in out
+        assert "Unknown agent" in out
 
     def test_unknown_agent_queue(self, capsys):
         """Queue command with unknown agent shows error."""
