@@ -123,6 +123,7 @@ class Agent:
     last_notify: float = 0
     last_command_sent: float = 0  # When we last sent a command (for grace period)
     last_stuck_notify: float = 0  # When we last notified about stuck thinking
+    last_dialog_notify: float = 0  # When we last notified about dialog state
     # Auto-continue
     auto_enabled: bool = False
     # Circuit breaker
@@ -149,6 +150,7 @@ NOTIFY_COOLDOWN = 30.0  # Seconds between notifications per agent
 COMMAND_GRACE_PERIOD = 5.0  # Don't notify "ready" within this many seconds of sending a command
 STARTUP_GRACE_PERIOD = 10.0  # Don't send any notifications for this many seconds after startup
 STUCK_NOTIFY_COOLDOWN = 60.0  # Seconds between "stuck thinking" notifications per agent
+DIALOG_NOTIFY_COOLDOWN = 30.0  # Seconds between "dialog" notifications per agent
 MAX_NO_PROGRESS = 3  # Open circuit after this many iterations without progress
 TAIL_BYTES = 500_000  # 500KB tail window for DONE_REPORT detection
 MAX_AUDIT_RETRIES = 1  # Only auto-queue "fix audit issues" once per task
@@ -603,6 +605,91 @@ def detect_stuck_thinking(output: str) -> Optional[int]:
     return None
 
 
+def extract_dialog_content(output: str) -> dict:
+    """Extract dialog question and options from tmux output.
+
+    Returns dict with:
+        - question: The main question being asked
+        - options: List of options if numbered dialog
+        - dialog_type: "numbered", "yesno", or "permission"
+        - raw: Raw relevant lines for Telegram notification
+    """
+    if not output:
+        return {"question": "", "options": [], "dialog_type": "unknown", "raw": ""}
+
+    lines = output.strip().split('\n')
+    result = {
+        "question": "",
+        "options": [],
+        "dialog_type": "unknown",
+        "raw": "",
+    }
+
+    # Find numbered options (❯ 1. or just 1. 2. 3.)
+    option_pattern = re.compile(r'^[\s❯]*(\d+)\.\s+(.+)$')
+    options = []
+    option_start_idx = -1
+
+    for i, line in enumerate(lines):
+        match = option_pattern.match(line)
+        if match:
+            if option_start_idx == -1:
+                option_start_idx = i
+            num, text = match.groups()
+            options.append(f"{num}. {text.strip()}")
+
+    if options:
+        result["options"] = options
+        result["dialog_type"] = "numbered"
+
+        # Find question - look for "?" line or context before options
+        for i in range(option_start_idx - 1, -1, -1):
+            line = lines[i].strip()
+            if line.startswith('?') or line.endswith('?'):
+                result["question"] = line.lstrip('? ').rstrip('?') + '?'
+                break
+            elif line and not line.startswith('❯') and not line.startswith('Esc'):
+                if not result["question"]:
+                    result["question"] = line
+
+        # Build raw output (context + options)
+        raw_lines = []
+        # Get 2-3 context lines before options
+        context_start = max(0, option_start_idx - 3)
+        for i in range(context_start, option_start_idx):
+            line = lines[i].strip()
+            if line and not line.startswith('❯'):
+                raw_lines.append(line)
+        raw_lines.extend(options)
+        result["raw"] = '\n'.join(raw_lines)
+        return result
+
+    # Check for y/n dialog
+    yesno_match = re.search(r'(Do you want to[^?]*\?)', output, re.IGNORECASE)
+    if yesno_match:
+        result["dialog_type"] = "yesno"
+        result["question"] = yesno_match.group(1)
+
+        # Get context before the question
+        idx = output.find(yesno_match.group(1))
+        context_start = max(0, idx - 300)
+        context = output[context_start:idx].strip().split('\n')
+        context_lines = [l.strip() for l in context if l.strip()][-4:]
+
+        result["raw"] = '\n'.join(context_lines + [result["question"], "Reply: y / n"])
+        return result
+
+    # Fallback for "Esc to cancel" permission dialog
+    if "Esc to cancel" in output:
+        result["dialog_type"] = "permission"
+        non_empty = [l.strip() for l in lines if l.strip()][-8:]
+        result["raw"] = '\n'.join(non_empty)
+        result["question"] = "Permission requested"
+        return result
+
+    return result
+
+
 # --- tmux Functions ---
 
 def tmux_capture(pane_id: str, lines: int = 30) -> Optional[str]:
@@ -763,6 +850,57 @@ def notify_agent_ready(agent: Agent, config: Config):
     # Telegram (rich summary)
     rich_summary = generate_rich_summary(agent, include_git=True)
     notify_telegram(rich_summary, config, parse_mode="Markdown")
+
+
+def notify_agent_dialog(agent: Agent, config: Config, dialog_content: dict, tmux_output: str):
+    """Send notification when agent needs user input (dialog state).
+
+    Args:
+        agent: The agent in dialog state
+        config: Config with notification settings
+        dialog_content: Result from extract_dialog_content()
+        tmux_output: Raw tmux output for context
+    """
+    ctx = get_task_context(agent)
+    dialog_type = dialog_content.get("dialog_type", "unknown")
+    question = dialog_content.get("question", "Input needed")
+    raw = dialog_content.get("raw", "")
+
+    # Short message for Mac/Pushover
+    short_msg = f"Needs input: {question[:50]}..." if len(question) > 50 else f"Needs input: {question}"
+
+    print(f"[NOTIFY-DIALOG] {agent.name}: {short_msg}")
+
+    # Mac notification (short, with sound to get attention)
+    try:
+        subprocess.run(
+            ["terminal-notifier", "-title", f"{agent.name} - INPUT NEEDED",
+             "-message", short_msg, "-sound", "Ping"],
+            capture_output=True, timeout=5,
+        )
+    except FileNotFoundError:
+        pass
+
+    # Pushover (short)
+    if config.pushover_user_key and config.pushover_api_token:
+        pushover_msg = f"{agent.name} ({ctx['project']})\n{short_msg}"
+        notify_pushover(pushover_msg, agent.name, config.pushover_user_key, config.pushover_api_token)
+
+    # Telegram (full dialog content so user can respond)
+    telegram_msg = f"*{agent.name}* needs input\n\n"
+    if ctx["task"]:
+        telegram_msg += f"Task: {ctx['task']}\n\n"
+    telegram_msg += f"```\n{raw}\n```\n\n"
+
+    # Add reply hint based on dialog type
+    if dialog_type == "numbered":
+        telegram_msg += f"Reply: `{agent.id}: <number>`"
+    elif dialog_type == "yesno":
+        telegram_msg += f"Reply: `{agent.id}: y` or `{agent.id}: n`"
+    else:
+        telegram_msg += f"Reply: `{agent.id}: <your response>`"
+
+    notify_telegram(telegram_msg, config, parse_mode="Markdown")
 
 
 def notify(message: str, config: Config, title: str = "Council"):
@@ -1165,6 +1303,25 @@ def check_agents(config: Config) -> list[str]:
 
                 elif new_state == "working" and old_state == "ready":
                     changes.append(f"{agent.name} is working...")
+
+                elif new_state == "dialog":
+                    changes.append(f"{agent.name} needs INPUT")
+                    # Notify user about dialog (with cooldown)
+                    now = time.time()
+                    time_since_startup = now - _startup_time
+                    if time_since_startup < STARTUP_GRACE_PERIOD:
+                        changes.append(f"  -> skipping dialog notify (startup grace)")
+                    elif (now - agent.last_dialog_notify) < DIALOG_NOTIFY_COOLDOWN:
+                        changes.append(f"  -> skipping dialog notify (cooldown)")
+                    else:
+                        # Extract and send dialog content
+                        dialog_content = extract_dialog_content(output)
+                        if dialog_content["raw"]:
+                            notify_agent_dialog(agent, config, dialog_content, output)
+                            agent.last_dialog_notify = now
+                            changes.append(f"  -> sent dialog notification")
+                        else:
+                            changes.append(f"  -> skipping dialog notify (no content)")
 
             agent.last_check = time.time()
         except Exception as e:
