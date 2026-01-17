@@ -52,12 +52,13 @@ _command_queue: queue.Queue = queue.Queue()
 _state_lock = threading.Lock()
 
 STATE_FILE = Path.home() / ".council" / "state.json"
-CURRENT_TASK_FILE = Path.home() / ".council" / "current_task.txt"
+CURRENT_TASK_DIR = Path.home() / ".council" / "tasks"  # Per-agent task files
 LOG_DIR = Path.home() / ".council" / "logs"
 
 # Run ID for this dispatcher session
 _run_id: str = str(uuid.uuid4())[:8]
 _log_lock = threading.Lock()
+_startup_time: float = 0.0  # Set when dispatcher actually starts
 
 
 def get_log_file() -> Path:
@@ -96,7 +97,10 @@ def log_event(
 
 
 # Git progress detection
-from council.dispatcher.gitwatch import take_snapshot, has_progress, GitSnapshot
+from council.dispatcher.gitwatch import (
+    take_snapshot, has_progress, GitSnapshot,
+    get_recent_commits, get_diff_summary, get_uncommitted_summary,
+)
 
 # Telegram bot (optional)
 try:
@@ -117,6 +121,8 @@ class Agent:
     state: str = "unknown"  # unknown, ready, working, dialog, missing
     last_check: float = 0
     last_notify: float = 0
+    last_command_sent: float = 0  # When we last sent a command (for grace period)
+    last_stuck_notify: float = 0  # When we last notified about stuck thinking
     # Auto-continue
     auto_enabled: bool = False
     # Circuit breaker
@@ -140,6 +146,9 @@ class Agent:
 
 
 NOTIFY_COOLDOWN = 30.0  # Seconds between notifications per agent
+COMMAND_GRACE_PERIOD = 5.0  # Don't notify "ready" within this many seconds of sending a command
+STARTUP_GRACE_PERIOD = 10.0  # Don't send any notifications for this many seconds after startup
+STUCK_NOTIFY_COOLDOWN = 60.0  # Seconds between "stuck thinking" notifications per agent
 MAX_NO_PROGRESS = 3  # Open circuit after this many iterations without progress
 TAIL_BYTES = 500_000  # 500KB tail window for DONE_REPORT detection
 MAX_AUDIT_RETRIES = 1  # Only auto-queue "fix audit issues" once per task
@@ -235,19 +244,43 @@ def load_state(config: Config):
 
 
 def write_current_task(agent: Agent, task: str):
-    """Write current task context for rich notifications.
+    """Write current task context for rich notifications (per-agent).
 
-    Format is source-able bash for the notification script:
+    Creates ~/.council/tasks/agent_{id}.txt with:
         AGENT_ID=1
         AGENT_NAME="AgentName"
         PANE_ID="%0"
         PROJECT="project-name"
         TASK="task description"
+
+    Skips writing for non-meaningful commands (continue, y, n, etc.)
     """
+    # Skip non-meaningful commands - don't overwrite real task
+    skip_commands = ["continue", "y", "n", "yes", "no", "ok", ""]
+    if task.strip().lower() in skip_commands:
+        return  # Keep the previous task
+
     try:
-        CURRENT_TASK_FILE.parent.mkdir(parents=True, exist_ok=True)
+        CURRENT_TASK_DIR.mkdir(parents=True, exist_ok=True)
+        task_file = CURRENT_TASK_DIR / f"agent_{agent.id}.txt"
+
+        # Strip common context injection prefixes to get the actual task
+        clean_task = task
+        context_prefixes = [
+            "CONTEXT FROM COUNCIL AGENT:",
+            "CONTEXT:",
+            "[CONTEXT]",
+            "[STRICT MODE]",
+            "[SANDBOX MODE]",
+            "[PLAN MODE]",
+        ]
+        for prefix in context_prefixes:
+            if clean_task.upper().startswith(prefix.upper()):
+                clean_task = clean_task[len(prefix):].strip()
+                break
+
         # Escape quotes in task for bash sourcing
-        safe_task = task[:100].replace('"', '\\"').replace('\n', ' ')
+        safe_task = clean_task[:100].replace('"', '\\"').replace('\n', ' ')
         project = agent.worktree.name if agent.worktree else "unknown"
         content = f'''AGENT_ID={agent.id}
 AGENT_NAME="{agent.name}"
@@ -255,9 +288,109 @@ PANE_ID="{agent.pane_id}"
 PROJECT="{project}"
 TASK="{safe_task}"
 '''
-        CURRENT_TASK_FILE.write_text(content)
+        task_file.write_text(content)
     except Exception as e:
         print(f"[WARN] Could not write current task: {e}")
+
+
+def get_task_context(agent: Agent) -> dict:
+    """Get current task context for an agent (from per-agent file).
+
+    Returns dict with agent_name, project, task (truncated).
+    """
+    project = agent.worktree.name if agent.worktree else "unknown"
+    task = ""
+
+    # Try to read the agent's task file
+    try:
+        task_file = CURRENT_TASK_DIR / f"agent_{agent.id}.txt"
+        if task_file.exists():
+            content = task_file.read_text()
+            for line in content.split('\n'):
+                if line.startswith('TASK="'):
+                    task = line[6:-1]  # Strip TASK=" and trailing "
+                    break
+    except Exception:
+        pass
+
+    return {
+        "agent_name": agent.name,
+        "project": project,
+        "task": task[:60] + "..." if len(task) > 60 else task
+    }
+
+
+def generate_rich_summary(agent: Agent, include_git: bool = True) -> str:
+    """Generate a rich ~5 sentence summary for Telegram notifications.
+
+    Includes:
+    - Task that was completed
+    - Git changes (commits, files changed)
+    - Uncommitted work if any
+    - Overall status
+
+    Args:
+        agent: The agent to summarize
+        include_git: Whether to include git info (default True)
+
+    Returns:
+        Formatted summary string (markdown-safe)
+    """
+    lines = []
+    ctx = get_task_context(agent)
+    project = ctx["project"]
+    task = ctx["task"]
+
+    # 1. Header with agent and project
+    lines.append(f"*{agent.name}* ({project})")
+
+    # 2. Task completed
+    if task:
+        lines.append(f"Task: {task}")
+    else:
+        lines.append("Task: (no task context)")
+
+    # 3. Git changes (if worktree configured)
+    if include_git and agent.worktree:
+        # Recent commits
+        commits = get_recent_commits(agent.worktree, count=2)
+        if commits and commits[0]:  # Check not empty list with empty string
+            lines.append("")
+            lines.append("Recent commits:")
+            for commit in commits[:2]:
+                if commit.strip():
+                    lines.append(f"  {commit[:60]}")
+
+        # Uncommitted changes
+        uncommitted = get_uncommitted_summary(agent.worktree)
+        total_uncommitted = (
+            len(uncommitted["staged"]) +
+            len(uncommitted["unstaged"]) +
+            len(uncommitted["untracked"])
+        )
+        if total_uncommitted > 0:
+            lines.append("")
+            parts = []
+            if uncommitted["staged"]:
+                parts.append(f"{len(uncommitted['staged'])} staged")
+            if uncommitted["unstaged"]:
+                parts.append(f"{len(uncommitted['unstaged'])} modified")
+            if uncommitted["untracked"]:
+                parts.append(f"{len(uncommitted['untracked'])} untracked")
+            lines.append(f"Uncommitted: {', '.join(parts)}")
+
+    # 4. Status
+    lines.append("")
+    if agent.circuit_state == "open":
+        lines.append("Status: Circuit OPEN (no git progress)")
+    elif agent.auto_enabled:
+        lines.append("Status: Auto-continue enabled")
+    elif agent.task_queue:
+        lines.append(f"Status: {len(agent.task_queue)} tasks queued")
+    else:
+        lines.append("Status: Awaiting next task")
+
+    return "\n".join(lines)
 
 
 # --- DONE_REPORT Detection ---
@@ -386,9 +519,13 @@ def run_auto_audit(agent: Agent, config: Config) -> Optional[str]:
         audit_passed = False
 
     # Determine verdict
+    ctx = get_task_context(agent)
     if invariants_passed and audit_passed:
         agent.audit_fail_streak = 0
-        notify(f"✅ {agent.name}: APPROVED", config)
+        msg = f"✅ {agent.name} ({ctx['project']})\nTask APPROVED"
+        if ctx["task"]:
+            msg += f"\n{ctx['task']}"
+        notify(msg, config, title=agent.name)
         log_event(agent.id, "audit_approved", agent.pane_id)
         return "APPROVED"
 
@@ -404,18 +541,20 @@ def run_auto_audit(agent: Agent, config: Config) -> Optional[str]:
         # Auto-queue fix task
         reasons = []
         if not invariants_passed:
-            reasons.append(f"invariants failed: {invariants_output[:100]}")
+            reasons.append(f"invariants: {invariants_output[:50]}")
         if not audit_passed:
-            reasons.append(f"audit failed: {audit_output[:100]}")
+            reasons.append(f"audit: {audit_output[:50]}")
         fix_task = f"Fix audit issues: {'; '.join(reasons)}"
         agent.task_queue.append(fix_task)
         save_state(config)
-        notify(f"❌ {agent.name}: REJECTED - queued fix task", config)
+        msg = f"❌ {agent.name} ({ctx['project']})\nREJECTED: {'; '.join(reasons)[:80]}\n→ Fix task queued (attempt {agent.audit_fail_streak}/{MAX_AUDIT_RETRIES})"
+        notify(msg, config, title=agent.name)
         log_event(agent.id, "audit_rejected", agent.pane_id, extra={"reasons": reasons})
         return f"REJECTED (fix queued, streak={agent.audit_fail_streak})"
     else:
         # Cap reached, notify human
-        notify(f"❌ {agent.name}: REQUIRES HUMAN - audit failed {agent.audit_fail_streak} times", config)
+        msg = f"🚨 {agent.name} ({ctx['project']})\nREQUIRES HUMAN\nFailed {agent.audit_fail_streak} times"
+        notify(msg, config, title=agent.name)
         log_event(agent.id, "audit_requires_human", agent.pane_id,
                   extra={"streak": agent.audit_fail_streak})
         return f"REQUIRES HUMAN (failed {agent.audit_fail_streak} times)"
@@ -560,8 +699,77 @@ def notify_pushover(message: str, title: str, user_key: str, api_token: str) -> 
         return False
 
 
+def notify_telegram(message: str, config: Config, parse_mode: Optional[str] = None) -> bool:
+    """Send a message to Telegram using stored chat_id.
+
+    Args:
+        message: The message text
+        config: Config with telegram_bot_token
+        parse_mode: Optional "Markdown" or "HTML" for formatting
+
+    Returns:
+        True if sent successfully
+    """
+    if not config.telegram_bot_token:
+        return False
+
+    chat_id_file = Path.home() / ".council" / "telegram_chat_id.txt"
+    if not chat_id_file.exists():
+        return False
+
+    try:
+        chat_id = chat_id_file.read_text().strip()
+        cmd = [
+            "curl", "-s", "-X", "POST",
+            f"https://api.telegram.org/bot{config.telegram_bot_token}/sendMessage",
+            "-d", f"chat_id={chat_id}",
+            "-d", f"text={message}",
+        ]
+        if parse_mode:
+            cmd.extend(["-d", f"parse_mode={parse_mode}"])
+        result = subprocess.run(cmd, capture_output=True, timeout=10)
+        return result.returncode == 0
+    except Exception as e:
+        print(f"[TELEGRAM ERROR] {e}")
+        return False
+
+
+def notify_agent_ready(agent: Agent, config: Config):
+    """Send rich notification when agent becomes ready.
+
+    Sends different content to different channels:
+    - Mac/Pushover: Short summary
+    - Telegram: Rich summary with git info (~5 sentences)
+    """
+    ctx = get_task_context(agent)
+    short_msg = f"Done: {ctx['task']}" if ctx['task'] else "Ready for next task"
+
+    print(f"[NOTIFY] {agent.name}: {short_msg}")
+
+    # Mac notification (short)
+    try:
+        subprocess.run(
+            ["terminal-notifier", "-title", agent.name, "-message", short_msg, "-sound", "default"],
+            capture_output=True, timeout=5,
+        )
+    except FileNotFoundError:
+        pass
+
+    # Pushover (short)
+    if config.pushover_user_key and config.pushover_api_token:
+        full_short = f"{agent.name} ({ctx['project']})\n{short_msg}\n→ Awaiting next task"
+        notify_pushover(full_short, agent.name, config.pushover_user_key, config.pushover_api_token)
+
+    # Telegram (rich summary)
+    rich_summary = generate_rich_summary(agent, include_git=True)
+    notify_telegram(rich_summary, config, parse_mode="Markdown")
+
+
 def notify(message: str, config: Config, title: str = "Council"):
-    """Send a notification (Mac + Pushover)."""
+    """Send a notification (Mac + Pushover + Telegram).
+
+    Note: For agent-ready notifications, use notify_agent_ready() instead.
+    """
     print(f"[NOTIFY] {message}")
     try:
         subprocess.run(
@@ -572,6 +780,8 @@ def notify(message: str, config: Config, title: str = "Council"):
         pass
     if config.pushover_user_key and config.pushover_api_token:
         notify_pushover(message, title, config.pushover_user_key, config.pushover_api_token)
+    # Also send to Telegram (plain text for generic notifications)
+    notify_telegram(f"{title}: {message}", config)
 
 
 # --- Pushover Open Client (inbound commands) ---
@@ -851,12 +1061,19 @@ def check_agents(config: Config) -> list[str]:
                     changes.append(f"{agent.name}: pane not found")
                 continue
 
-            # Check for stuck thinking (notify has cooldown, won't spam)
+            # Check for stuck thinking (with cooldown to prevent spam)
             thinking_duration = detect_stuck_thinking(output)
             if thinking_duration and thinking_duration >= STUCK_THINKING_THRESHOLD:
-                minutes = thinking_duration // 60
-                changes.append(f"{agent.name}: stuck thinking ({minutes}m)")
-                notify(f"[{agent.id}] {agent.name} stuck thinking for {minutes}min", config)
+                now = time.time()
+                if now - agent.last_stuck_notify >= STUCK_NOTIFY_COOLDOWN:
+                    minutes = thinking_duration // 60
+                    changes.append(f"{agent.name}: stuck thinking ({minutes}m)")
+                    ctx = get_task_context(agent)
+                    msg = f"🤔 {agent.name} ({ctx['project']})\nStuck thinking for {minutes}min"
+                    if ctx["task"]:
+                        msg += f"\nTask: {ctx['task']}"
+                    notify(msg, config, title=agent.name)
+                    agent.last_stuck_notify = now
 
             new_state = detect_state(output)
             if new_state != agent.state:
@@ -896,7 +1113,9 @@ def check_agents(config: Config) -> list[str]:
                             changes.append(f"  -> CIRCUIT OPEN (no progress)")
                             log_event(agent.id, "circuit_open", agent.pane_id,
                                       extra={"streak": agent.no_progress_streak})
-                            notify(f"{agent.name}: circuit open - no progress", config)
+                            ctx = get_task_context(agent)
+                            msg = f"⚠️ {agent.name} ({ctx['project']})\nCIRCUIT OPEN - no git progress\n{agent.no_progress_streak} iterations without commits\n→ Use 'reset {agent.id}' to retry"
+                            notify(msg, config, title=agent.name)
                             save_state(config)
 
                     # Dequeue from task queue (takes priority over auto-continue)
@@ -909,6 +1128,7 @@ def check_agents(config: Config) -> list[str]:
                             changes.append(f"  -> queued task: {next_task[:40]}...")
                             changes.append(f"     [{len(agent.task_queue)} remaining]")
                             agent.state = "working"
+                            agent.last_command_sent = time.time()
                             write_current_task(agent, next_task)
                             save_state(config)
                     # Auto-continue (simplified - just send "continue")
@@ -918,12 +1138,30 @@ def check_agents(config: Config) -> list[str]:
                         if send_to_agent(agent, "continue", config, cmd_type="auto_continue"):
                             changes.append(f"  -> auto-continue sent")
                             agent.state = "working"
+                            agent.last_command_sent = time.time()
                     elif not agent.auto_enabled and not agent.task_queue:
-                        # Notify user
+                        # Notify user with rich context
                         now = time.time()
-                        if now - agent.last_notify >= NOTIFY_COOLDOWN:
-                            notify(f"{agent.name} needs input", config)
-                            agent.last_notify = now
+
+                        # Startup grace: don't spam notifications when dispatcher starts
+                        time_since_startup = now - _startup_time
+                        if time_since_startup < STARTUP_GRACE_PERIOD:
+                            changes.append(f"  -> skipping notify (startup grace: {time_since_startup:.1f}s)")
+                        # Command grace: don't notify if we just sent a command
+                        elif (now - agent.last_command_sent) < COMMAND_GRACE_PERIOD:
+                            changes.append(f"  -> skipping notify (command grace: {now - agent.last_command_sent:.1f}s)")
+                        # Cooldown: don't spam notifications
+                        elif now - agent.last_notify < NOTIFY_COOLDOWN:
+                            changes.append(f"  -> skipping notify (cooldown: {now - agent.last_notify:.1f}s)")
+                        else:
+                            ctx = get_task_context(agent)
+                            if ctx["task"]:
+                                # Send rich notification (different content per channel)
+                                notify_agent_ready(agent, config)
+                                agent.last_notify = now
+                                changes.append(f"  -> sent rich notification")
+                            else:
+                                changes.append(f"  -> skipping notify (no task context)")
 
                 elif new_state == "working" and old_state == "ready":
                     changes.append(f"{agent.name} is working...")
@@ -1142,6 +1380,7 @@ def process_line(line: str, config: Config) -> bool:
                 if not config.dry_run:
                     print(f"-> {agent.name}: {command[:50]}...")
                 agent.state = "working"
+                agent.last_command_sent = time.time()
                 write_current_task(agent, command)
             else:
                 print(f"Failed to send to {agent.name}")
@@ -1385,6 +1624,10 @@ poll_interval: 2.0
         if telegram_bot:
             print(f"  Telegram: enabled")
     print()
+
+    # Initialize startup time for grace period
+    global _startup_time
+    _startup_time = time.time()
 
     # Initial check
     check_agents(config)
