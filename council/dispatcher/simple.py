@@ -1420,8 +1420,8 @@ def parse_command(line: str) -> tuple[Optional[int], Optional[str]]:
     if progress_match:
         return int(progress_match.group(1)), "progress_mark"
 
-    # Agent command: "1: do something"
-    match = re.match(r"^(\d+)[:\s]+(.+)$", line)
+    # Agent command: "1: do something" or "1-do something" or "1 do something"
+    match = re.match(r"^(\d+)[:\s\-]+(.+)$", line)
     if match:
         return int(match.group(1)), match.group(2)
 
