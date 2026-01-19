@@ -416,7 +416,17 @@ def write_current_task(agent: Agent, task: str):
     """
     # Skip non-meaningful commands - don't overwrite real task
     skip_commands = ["continue", "y", "n", "yes", "no", "ok", ""]
-    if task.strip().lower() in skip_commands:
+    task_clean = task.strip().lower()
+
+    if task_clean in skip_commands:
+        return  # Keep the previous task
+
+    # Skip single/double digits (dialog option responses like "1", "2")
+    if task_clean.isdigit() and len(task_clean) <= 2:
+        return  # Keep the previous task
+
+    # Skip very short strings (likely confirmations like "yeah", "nah", "sure")
+    if len(task_clean) <= 4:
         return  # Keep the previous task
 
     try:
