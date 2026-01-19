@@ -197,7 +197,7 @@ Target Projects (SPOKES)
 
 | Source | Config |
 |--------|--------|
-| FIFO | `~/.council/in.fifo` (voice via Wispr) |
+| Socket | `~/.council/council.sock` (voice via Wispr/Shortcuts) |
 | Telegram | bot_token + allowed_user_ids in config.yaml |
 | Pushover | user_key + api_token in config.yaml |
 

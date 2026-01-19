@@ -524,15 +524,18 @@ reset 1    # Reset circuit breaker for agent 1
 
 | Source | Setup | Use Case |
 |--------|-------|----------|
-| FIFO | `mkfifo ~/.council/in.fifo` | Voice via Wispr Flow |
+| Socket | `socket_path` in config (default: `~/.council/council.sock`) | Voice via Wispr Flow |
 | Telegram | Bot token + allowed_user_ids in config | Phone commands |
 | Pushover | user_key + api_token in config | Receive notifications |
 | Direct tmux | Manual `tmux send-keys` | Emergency intervention |
 
-**Voice setup (Wispr Flow):**
+**Voice setup (Wispr Flow / macOS Shortcuts):**
 ```bash
-# Wispr outputs to file, watch and pipe to FIFO
-echo "1: build the feature" > ~/.council/in.fifo
+# Option 1: Use helper script
+~/path/to/council-v3/scripts/send_command.sh "1: build the feature"
+
+# Option 2: Direct socket command
+echo "1: build the feature" | nc -U ~/.council/council.sock
 ```
 
 **Telegram setup:**
