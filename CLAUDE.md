@@ -5,9 +5,9 @@
 Voice/phone command router for multiple Claude Code agents in tmux panes.
 
 **What it does:**
-- Routes commands from FIFO (voice), Pushover (phone), Telegram to tmux panes
+- Routes commands from Unix socket (voice), Pushover (phone), Telegram to tmux panes
 - Auto-continue with circuit breaker (git-based progress detection)
-- Notifications (Mac + Pushover)
+- Notifications (Mac + Pushover + Telegram)
 
 **What agents do themselves:**
 - Task management (TodoWrite)
@@ -43,8 +43,17 @@ python -m council.dispatcher.simple ~/.council/config.yaml
 ## Testing
 
 ```bash
+# Unit tests (safe to run from Claude Code)
 pytest tests/ -v
+
+# Pre-test audit (run before any dispatcher testing)
+./scripts/pre_test_audit.sh
+
+# E2E tests (run in SEPARATE tmux pane, NOT from Claude Code)
+./scripts/e2e_test.sh
 ```
+
+**WARNING**: Never run the live dispatcher from Claude Code - it causes freezes due to blocking I/O. Always run `pre_test_audit.sh` first, then test in a separate tmux pane.
 
 ## Dispatcher Commands
 
@@ -93,15 +102,20 @@ pytest tests/ -v
 
 | File | Purpose |
 |------|---------|
-| `council/dispatcher/simple.py` | Main dispatcher (~955 lines) |
+| `council/dispatcher/simple.py` | Main dispatcher (~2000 lines) |
+| `council/dispatcher/socket_server.py` | Unix socket server for commands |
 | `council/dispatcher/gitwatch.py` | Git progress detection |
 | `council/dispatcher/telegram.py` | Telegram bot (curl-based) |
 | `council/council.py` | LLM Council - multi-model planning |
 | `council/cli.py` | CLI: `council plan/debate/refine/bootstrap` |
+| `scripts/send_command.sh` | Helper to send commands via socket |
 | `scripts/check_invariants.py` | Path violation checker |
 | `scripts/audit_done.py` | Transcript auditor |
+| `scripts/pre_test_audit.sh` | Run BEFORE dispatcher testing |
+| `scripts/e2e_test.sh` | E2E test (run in separate tmux pane) |
 | `~/.council/config.yaml` | Runtime config |
 | `~/.council/state.json` | Persisted state |
+| `~/.council/council.sock` | Unix socket (created by dispatcher) |
 
 ## Config Example
 
@@ -116,7 +130,8 @@ agents:
     name: "Agent 2"
     worktree: ~/projects/other-project
 
-fifo_path: ~/.council/in.fifo
+# Socket path (default: ~/.council/council.sock)
+socket_path: ~/.council/council.sock
 poll_interval: 2.0
 
 pushover:
@@ -129,6 +144,20 @@ pushover:
 telegram:
   bot_token: "xxx"
   allowed_user_ids: [123456789]
+```
+
+## Sending Commands
+
+```bash
+# Via helper script
+./scripts/send_command.sh "1: do something"
+
+# Via netcat directly
+echo "status" | nc -U ~/.council/council.sock
+
+# Via Python
+from council.dispatcher.socket_server import send_command
+send_command("~/.council/council.sock", "1: task")
 ```
 
 ---

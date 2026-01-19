@@ -28,10 +28,12 @@ Commands:
     quit             Exit
 """
 
+import errno
 import json
 import os
 import queue
 import re
+import select
 import subprocess
 import sys
 import threading
@@ -110,6 +112,161 @@ except ImportError:
     TELEGRAM_AVAILABLE = False
     TelegramBot = None
 
+# Socket server
+from council.dispatcher.socket_server import SocketServer
+
+
+class FifoReader:
+    """
+    Non-blocking FIFO reader using raw file descriptors.
+
+    Solves the fundamental problems with select() + buffered Python file objects:
+    - Uses O_RDONLY | O_NONBLOCK (proper EOF detection, no blocking)
+    - Manual line buffering with os.read() (no hidden Python buffer)
+    - Explicit EAGAIN handling (no silent failures)
+    - Clean reopen on EOF (when writers close)
+    """
+
+    def __init__(self, fifo_path: str, read_size: int = 4096):
+        self.fifo_path = fifo_path
+        self.read_size = read_size
+        self.fd: Optional[int] = None
+        self._buffer = b""
+        self._debug_log: Optional[object] = None
+
+    def enable_debug(self, log_path: str = "/tmp/fifo_debug.log"):
+        """Enable debug logging to a file."""
+        self._debug_log = open(log_path, "w")
+
+    def _log(self, msg: str):
+        """Write debug log if enabled."""
+        if self._debug_log:
+            self._debug_log.write(f"{time.time()}: {msg}\n")
+            self._debug_log.flush()
+
+    def open(self) -> bool:
+        """
+        Open the FIFO for reading.
+
+        Uses O_RDONLY | O_NONBLOCK:
+        - O_RDONLY: Blocks until a writer opens (desired behavior)
+        - O_NONBLOCK: Subsequent reads won't block
+
+        Returns True if opened successfully.
+        """
+        if self.fd is not None:
+            return True
+
+        try:
+            # O_RDONLY blocks until writer connects (good - avoids busy loop)
+            # O_NONBLOCK makes subsequent reads non-blocking
+            self.fd = os.open(self.fifo_path, os.O_RDONLY | os.O_NONBLOCK)
+            self._buffer = b""
+            self._log(f"opened fd={self.fd}")
+            return True
+        except OSError as e:
+            self._log(f"open failed: {e}")
+            return False
+
+    def close(self):
+        """Close the FIFO."""
+        if self.fd is not None:
+            try:
+                os.close(self.fd)
+                self._log(f"closed fd={self.fd}")
+            except OSError:
+                pass
+            self.fd = None
+            self._buffer = b""
+
+        if self._debug_log:
+            try:
+                self._debug_log.close()
+            except Exception:
+                pass
+            self._debug_log = None
+
+    def read_lines(self, timeout: float = 0.5) -> list[str]:
+        """
+        Read available lines from the FIFO.
+
+        Uses select() for efficient waiting, then os.read() for non-blocking reads.
+        Returns a list of complete lines (without newlines).
+        Incomplete lines are buffered for next call.
+
+        Returns empty list if:
+        - No data available within timeout
+        - FIFO not open
+        - Error occurred (will auto-reopen)
+        """
+        if self.fd is None:
+            if not self.open():
+                return []
+
+        lines = []
+
+        try:
+            # Wait for data with select (works correctly with raw fd)
+            readable, _, _ = select.select([self.fd], [], [], timeout)
+
+            if not readable:
+                return lines
+
+            self._log("select: readable")
+
+            # Read available data
+            while True:
+                try:
+                    data = os.read(self.fd, self.read_size)
+                    self._log(f"os.read: {len(data)} bytes")
+
+                    if not data:
+                        # EOF - all writers closed
+                        self._log("EOF detected, reopening")
+                        self._reopen()
+                        break
+
+                    self._buffer += data
+
+                except OSError as e:
+                    if e.errno in (errno.EAGAIN, errno.EWOULDBLOCK):
+                        # No more data available right now
+                        self._log("EAGAIN - no more data")
+                        break
+                    else:
+                        # Real error
+                        self._log(f"read error: {e}")
+                        self._reopen()
+                        break
+
+            # Extract complete lines from buffer
+            while b"\n" in self._buffer:
+                line, self._buffer = self._buffer.split(b"\n", 1)
+                try:
+                    decoded = line.decode("utf-8").strip()
+                    if decoded:  # Skip empty lines
+                        lines.append(decoded)
+                        self._log(f"line: {decoded!r}")
+                except UnicodeDecodeError:
+                    self._log(f"decode error: {line!r}")
+                    # Skip malformed data
+
+        except Exception as e:
+            self._log(f"unexpected error: {e}")
+            self._reopen()
+
+        return lines
+
+    def _reopen(self):
+        """Close and prepare for reopen on next read."""
+        if self.fd is not None:
+            try:
+                os.close(self.fd)
+            except OSError:
+                pass
+            self.fd = None
+        # Keep buffer - might have partial line
+
 
 @dataclass
 class Agent:
@@ -147,8 +304,7 @@ class Agent:
 
 
 NOTIFY_COOLDOWN = 30.0  # Seconds between notifications per agent
-COMMAND_GRACE_PERIOD = 5.0  # Don't notify "ready" within this many seconds of sending a command
-STARTUP_GRACE_PERIOD = 10.0  # Don't send any notifications for this many seconds after startup
+READY_NOTIFY_DELAY = 10.0  # Don't notify "ready" within this many seconds of sending a command
 STUCK_NOTIFY_COOLDOWN = 60.0  # Seconds between "stuck thinking" notifications per agent
 DIALOG_NOTIFY_COOLDOWN = 30.0  # Seconds between "dialog" notifications per agent
 MAX_NO_PROGRESS = 3  # Open circuit after this many iterations without progress
@@ -161,7 +317,8 @@ class Config:
     """Dispatcher configuration."""
     agents: dict[int, Agent]
     poll_interval: float = 2.0
-    fifo_path: Optional[Path] = None
+    socket_path: Optional[Path] = None  # Unix domain socket (preferred)
+    fifo_path: Optional[Path] = None  # Legacy FIFO (deprecated)
     input_pane: Optional[str] = None
     # Pushover (outbound notifications)
     pushover_user_key: Optional[str] = None
@@ -1164,14 +1321,26 @@ def load_config(path: Path) -> Config:
             mode=agent_cfg.get("mode", "default"),
         )
 
+    # Socket path (preferred) - default to ~/.council/council.sock
+    socket_path = None
+    if raw.get("socket_path"):
+        socket_path = Path(os.path.expanduser(raw["socket_path"]))
+    elif not raw.get("fifo_path"):
+        # Default to socket if neither specified
+        socket_path = Path.home() / ".council" / "council.sock"
+
+    # Legacy FIFO path (deprecated)
     fifo_path = None
     if raw.get("fifo_path"):
         fifo_path = Path(os.path.expanduser(raw["fifo_path"]))
+        if not socket_path:
+            print("[WARN] fifo_path is deprecated, use socket_path instead")
 
     pushover = raw.get("pushover", {})
     return Config(
         agents=agents,
         poll_interval=raw.get("poll_interval", 2.0),
+        socket_path=socket_path,
         fifo_path=fifo_path,
         input_pane=raw.get("input_pane"),
         pushover_user_key=pushover.get("user_key"),
@@ -1187,7 +1356,13 @@ def load_config(path: Path) -> Config:
 # --- Agent Monitoring ---
 
 def check_agents(config: Config) -> list[str]:
-    """Check all agents and return list of state changes."""
+    """Check all agents and return list of state changes.
+
+    SIMPLIFIED notification logic:
+    - Notify when state changes from working → ready
+    - Guard 1: At least READY_NOTIFY_DELAY (10s) since last command
+    - Guard 2: At least NOTIFY_COOLDOWN (30s) since last notify
+    """
     changes = []
 
     for agent in config.agents.values():
@@ -1214,6 +1389,7 @@ def check_agents(config: Config) -> list[str]:
                     agent.last_stuck_notify = now
 
             new_state = detect_state(output)
+
             if new_state != agent.state:
                 old_state = agent.state
                 agent.state = new_state
@@ -1239,7 +1415,6 @@ def check_agents(config: Config) -> list[str]:
                             agent.no_progress_streak = 0
                             changes.append(f"  -> progress detected, streak reset")
                         elif agent.circuit_state != "open":
-                            # Only increment streak if circuit not already open
                             agent.no_progress_streak += 1
                             changes.append(f"  -> no progress ({agent.no_progress_streak}/{MAX_NO_PROGRESS})")
                         agent.last_snapshot = new_snapshot
@@ -1258,18 +1433,18 @@ def check_agents(config: Config) -> list[str]:
 
                     # Dequeue from task queue (takes priority over auto-continue)
                     if agent.task_queue and agent.circuit_state == "closed":
-                        next_task = agent.task_queue[0]  # Peek first
+                        next_task = agent.task_queue[0]
                         if agent.worktree:
                             agent.last_snapshot = take_snapshot(agent.worktree)
                         if send_to_agent(agent, next_task, config, cmd_type="dequeue"):
-                            agent.task_queue.pop(0)  # Pop after successful send
+                            agent.task_queue.pop(0)
                             changes.append(f"  -> queued task: {next_task[:40]}...")
                             changes.append(f"     [{len(agent.task_queue)} remaining]")
                             agent.state = "working"
                             agent.last_command_sent = time.time()
                             write_current_task(agent, next_task)
                             save_state(config)
-                    # Auto-continue (simplified - just send "continue")
+                    # Auto-continue
                     elif agent.auto_enabled and agent.circuit_state == "closed":
                         if agent.worktree:
                             agent.last_snapshot = take_snapshot(agent.worktree)
@@ -1277,51 +1452,34 @@ def check_agents(config: Config) -> list[str]:
                             changes.append(f"  -> auto-continue sent")
                             agent.state = "working"
                             agent.last_command_sent = time.time()
-                    elif not agent.auto_enabled and not agent.task_queue:
-                        # Notify user with rich context
+                    # SIMPLIFIED NOTIFICATION: only when transitioning from working→ready
+                    elif old_state == "working":
                         now = time.time()
+                        time_since_cmd = now - agent.last_command_sent
+                        time_since_notify = now - agent.last_notify
 
-                        # Startup grace: don't spam notifications when dispatcher starts
-                        time_since_startup = now - _startup_time
-                        if time_since_startup < STARTUP_GRACE_PERIOD:
-                            changes.append(f"  -> skipping notify (startup grace: {time_since_startup:.1f}s)")
-                        # Command grace: don't notify if we just sent a command
-                        elif (now - agent.last_command_sent) < COMMAND_GRACE_PERIOD:
-                            changes.append(f"  -> skipping notify (command grace: {now - agent.last_command_sent:.1f}s)")
-                        # Cooldown: don't spam notifications
-                        elif now - agent.last_notify < NOTIFY_COOLDOWN:
-                            changes.append(f"  -> skipping notify (cooldown: {now - agent.last_notify:.1f}s)")
+                        # Simple 2-guard check
+                        if time_since_cmd >= READY_NOTIFY_DELAY and time_since_notify >= NOTIFY_COOLDOWN:
+                            notify_agent_ready(agent, config)
+                            agent.last_notify = now
+                            changes.append(f"  -> notification sent")
+                        elif time_since_cmd < READY_NOTIFY_DELAY:
+                            changes.append(f"  -> notify skipped (wait {READY_NOTIFY_DELAY - time_since_cmd:.0f}s)")
                         else:
-                            ctx = get_task_context(agent)
-                            if ctx["task"]:
-                                # Send rich notification (different content per channel)
-                                notify_agent_ready(agent, config)
-                                agent.last_notify = now
-                                changes.append(f"  -> sent rich notification")
-                            else:
-                                changes.append(f"  -> skipping notify (no task context)")
+                            changes.append(f"  -> notify skipped (cooldown)")
 
                 elif new_state == "working" and old_state == "ready":
                     changes.append(f"{agent.name} is working...")
 
                 elif new_state == "dialog":
                     changes.append(f"{agent.name} needs INPUT")
-                    # Notify user about dialog (with cooldown)
                     now = time.time()
-                    time_since_startup = now - _startup_time
-                    if time_since_startup < STARTUP_GRACE_PERIOD:
-                        changes.append(f"  -> skipping dialog notify (startup grace)")
-                    elif (now - agent.last_dialog_notify) < DIALOG_NOTIFY_COOLDOWN:
-                        changes.append(f"  -> skipping dialog notify (cooldown)")
-                    else:
-                        # Extract and send dialog content
+                    if (now - agent.last_dialog_notify) >= DIALOG_NOTIFY_COOLDOWN:
                         dialog_content = extract_dialog_content(output)
                         if dialog_content["raw"]:
                             notify_agent_dialog(agent, config, dialog_content, output)
                             agent.last_dialog_notify = now
                             changes.append(f"  -> sent dialog notification")
-                        else:
-                            changes.append(f"  -> skipping dialog notify (no content)")
 
             agent.last_check = time.time()
         except Exception as e:
@@ -1549,82 +1707,118 @@ def process_line(line: str, config: Config) -> bool:
 
 # --- Main Loop ---
 
-def run_with_fifo(config: Config, pushover_client: Optional[PushoverClient] = None):
-    """Run dispatcher reading from FIFO."""
-    import select
+def run_with_socket(config: Config, pushover_client: Optional[PushoverClient] = None):
+    """Run dispatcher reading from Unix domain socket.
 
-    fifo_path = config.fifo_path
-    print(f"Reading from FIFO: {fifo_path}")
+    The socket server runs in a background thread and puts commands
+    into the same _command_queue used by Telegram.
+    """
+    socket_path = str(config.socket_path)
+    print(f"Listening on socket: {socket_path}")
+
+    # Create socket server using the shared command queue
+    socket_server = SocketServer(socket_path, _command_queue, source_name="socket")
+
+    if not socket_server.start():
+        print(f"Error: Could not start socket server at {socket_path}")
+        return
 
     last_poll = time.time()
-    fd = None
-    fifo = None
 
     try:
         while True:
-            try:
-                if fd is None:
-                    fd = os.open(fifo_path, os.O_RDONLY | os.O_NONBLOCK)
-                    fifo = os.fdopen(fd, "r")
+            # Poll command queue (Socket + Telegram + any other sources)
+            while True:
+                try:
+                    source, cmd = _command_queue.get_nowait()
+                    print(f"[{source.upper()}] {cmd}")
+                    if not process_line(cmd, config):
+                        return
+                except queue.Empty:
+                    break
 
-                if select.select([fifo], [], [], 0.5)[0]:
-                    line = fifo.readline()
-                    if not line:
-                        fifo.close()
-                        fd = None
-                        fifo = None
-                        continue
-                    if not process_line(line, config):
+            # Poll Pushover
+            if pushover_client:
+                for cmd in pushover_poll(pushover_client, config):
+                    print(f"[PUSHOVER CMD] {cmd}")
+                    if not process_line(cmd, config):
                         return
 
-                # Poll Pushover
-                if pushover_client:
-                    for cmd in pushover_poll(pushover_client, config):
-                        print(f"[PUSHOVER CMD] {cmd}")
-                        if not process_line(cmd, config):
-                            return
+            # Periodic agent check
+            if time.time() - last_poll >= config.poll_interval:
+                changes = check_agents(config)
+                for change in changes:
+                    print(f"[{time.strftime('%H:%M:%S')}] {change}")
+                last_poll = time.time()
 
-                # Poll command queue (Telegram)
-                while True:
-                    try:
-                        source, cmd = _command_queue.get_nowait()
-                        print(f"[{source.upper()} CMD] {cmd}")
-                        if not process_line(cmd, config):
-                            return
-                    except queue.Empty:
-                        break
-
-                # Periodic agent check
-                if time.time() - last_poll >= config.poll_interval:
-                    changes = check_agents(config)
-                    for change in changes:
-                        print(f"[{time.strftime('%H:%M:%S')}] {change}")
-                    last_poll = time.time()
-
-            except OSError:
-                if fifo:
-                    try:
-                        fifo.close()
-                    except Exception:
-                        pass
-                fd = None
-                fifo = None
-                time.sleep(1)
+            # Small sleep to avoid busy loop
+            time.sleep(0.1)
 
     except KeyboardInterrupt:
         print("\nBye!")
     finally:
-        if fifo:
-            try:
-                fifo.close()
-            except Exception:
-                pass
+        socket_server.stop()
+
+
+def run_with_fifo(config: Config, pushover_client: Optional[PushoverClient] = None):
+    """Run dispatcher reading from FIFO using non-blocking I/O."""
+    fifo_path = config.fifo_path
+    print(f"Reading from FIFO: {fifo_path}")
+
+    last_poll = time.time()
+
+    # Use the new non-blocking FIFO reader
+    fifo_reader = FifoReader(fifo_path)
+    fifo_reader.enable_debug()  # Logs to /tmp/fifo_debug.log
+
+    try:
+        # Initial open - this will block until a writer connects
+        # which is correct behavior (avoids busy loop)
+        print("Waiting for FIFO writer...")
+        if not fifo_reader.open():
+            print(f"Error: Could not open FIFO {fifo_path}")
+            return
+        print("FIFO connected")
+
+        while True:
+            # Read all available lines (non-blocking with 0.5s timeout)
+            for line in fifo_reader.read_lines(timeout=0.5):
+                print(f"[FIFO] {line}")
+                if not process_line(line, config):
+                    return
+
+            # Poll Pushover
+            if pushover_client:
+                for cmd in pushover_poll(pushover_client, config):
+                    print(f"[PUSHOVER CMD] {cmd}")
+                    if not process_line(cmd, config):
+                        return
+
+            # Poll command queue (Telegram)
+            while True:
+                try:
+                    source, cmd = _command_queue.get_nowait()
+                    print(f"[{source.upper()} CMD] {cmd}")
+                    if not process_line(cmd, config):
+                        return
+                except queue.Empty:
+                    break
+
+            # Periodic agent check
+            if time.time() - last_poll >= config.poll_interval:
+                changes = check_agents(config)
+                for change in changes:
+                    print(f"[{time.strftime('%H:%M:%S')}] {change}")
+                last_poll = time.time()
+
+    except KeyboardInterrupt:
+        print("\nBye!")
+    finally:
+        fifo_reader.close()
 
 
 def run_with_stdin(config: Config, pushover_client: Optional[PushoverClient] = None):
     """Run dispatcher reading from stdin."""
-    import select
-
     print("Ready. Type commands (or 'help'):\n")
     last_poll = time.time()
 
@@ -1719,7 +1913,7 @@ agents:
     pane_id: "%1"
     name: "Agent 2"
 
-fifo_path: ~/.council/in.fifo
+socket_path: ~/.council/council.sock
 poll_interval: 2.0
 """)
         sys.exit(1)
@@ -1790,8 +1984,11 @@ poll_interval: 2.0
     check_agents(config)
     show_status(config)
 
-    # Run
-    if config.fifo_path and config.fifo_path.exists():
+    # Run - prefer socket over FIFO over stdin
+    if config.socket_path:
+        run_with_socket(config, pushover_client)
+    elif config.fifo_path and config.fifo_path.exists():
+        print("[WARN] Using deprecated FIFO mode. Migrate to socket_path.")
         run_with_fifo(config, pushover_client)
     else:
         if config.fifo_path:
