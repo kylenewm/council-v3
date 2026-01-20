@@ -1,0 +1,34 @@
+# invariants.yaml - Project-specific path protection
+#
+# Usage:
+#   The mode injection scripts read this file and warn about forbidden/protected paths
+#
+# Customize this for your project
+
+# Forbidden paths - ALWAYS blocked, no override
+# Use for: credentials, secrets, sensitive configs
+forbidden_paths:
+  - "*.env"
+  - ".env.*"
+  - "credentials/*"
+  - ".secrets/*"
+  - "**/secrets.yaml"
+  - "**/api_keys.json"
+
+# Protected paths - blocked by default, require explicit approval
+# Use for: schemas, migrations, production configs
+protected_paths:
+  # Uncomment and customize for your project:
+  # - "api/schema.py"
+  # - "migrations/*"
+  # - "config/production.yaml"
+  # - "docker-compose.prod.yaml"
+
+# Notes (optional, for documentation)
+notes: |
+  Forbidden paths cannot be modified by agents under any circumstances.
+  Protected paths require explicit approval from the user.
+
+  Customize this file for your project:
+  - Add sensitive files to forbidden_paths
+  - Add files that need careful review to protected_paths
