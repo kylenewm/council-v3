@@ -115,6 +115,19 @@ python scripts/check_invariants.py --diff main --allow-protected
 
 ---
 
+## Quality Hooks (PreToolUse/PostToolUse)
+
+| Hook | Type | What |
+|------|------|------|
+| `tdd_guard.py` | PreToolUse | Blocks Write/Edit unless failing tests exist |
+| `file_checker.py` | PostToolUse | Auto-format + lint/type check Python files |
+
+**Install:** `quality-pack/install.sh` (see `quality-pack/README.md`)
+
+**TDD Guard:** Hard enforcement - can't write implementation code without a failing test first. Override by retrying within 60s.
+
+---
+
 ## Audit
 
 ```bash
