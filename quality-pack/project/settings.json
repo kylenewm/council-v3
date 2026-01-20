@@ -54,6 +54,10 @@
           {
             "type": "command",
             "command": "black \"$CLAUDE_FILE_PATH\" 2>/dev/null || true"
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.council/hooks/type-check.sh"
           }
         ]
       }

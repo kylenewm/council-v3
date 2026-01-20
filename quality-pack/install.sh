@@ -72,6 +72,8 @@ WHAT GETS INSTALLED:
         - CLAUDE.md: Quality rules that apply to all projects
         - hooks/inject.sh: Main injection router
         - hooks/auto-inject.sh: Global mindset rules
+        - hooks/type-check.sh: Language-aware type checking (mypy, tsc, go vet)
+        - hooks/notify-rich.sh: Rich notifications on stop
         - hooks/modes/*.sh: Mode-specific prompts
 
     Project (current directory):
@@ -116,7 +118,7 @@ install_global() {
     fi
 
     # Copy hooks
-    for hook in inject.sh auto-inject.sh; do
+    for hook in inject.sh auto-inject.sh type-check.sh notify-rich.sh; do
         if [[ ! -f "$HOME/.council/hooks/$hook" ]] || [[ "$FORCE" == "true" ]]; then
             cp "$GLOBAL_DIR/hooks/$hook" "$HOME/.council/hooks/$hook"
             chmod +x "$HOME/.council/hooks/$hook"

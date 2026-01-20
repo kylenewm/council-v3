@@ -41,6 +41,7 @@ cd /path/to/your/project
 └── hooks/
     ├── inject.sh          # Main injection router
     ├── auto-inject.sh     # Global mindset rules
+    ├── type-check.sh      # Language-aware type checking
     ├── notify-rich.sh     # Notification on stop
     └── modes/
         ├── production.sh  # Right > Fast
@@ -208,6 +209,34 @@ What this command does.
 ### Project-Specific Invariants
 
 Edit `.council/invariants.yaml` in your project to add paths specific to that project.
+
+## Type Checking (PostToolUse Hook)
+
+The `type-check.sh` hook runs automatically after Write/Edit operations on code files.
+
+### Supported Languages
+
+| Language | Tool | Requirements |
+|----------|------|--------------|
+| Python | mypy, pyright | `pip install mypy` or `pip install pyright` |
+| TypeScript | tsc | `npm install -g typescript` |
+| Go | go vet | Go toolchain |
+| Rust | cargo check | Rust toolchain |
+
+### How It Works
+
+1. Detects file extension (.py, .ts, .tsx, .go, .rs)
+2. Runs appropriate type checker
+3. Reports errors to Claude (doesn't block)
+4. Claude can then fix type errors proactively
+
+### Configuration
+
+The hook is enabled by default in `settings.json`. To disable:
+- Remove the `type-check.sh` line from PostToolUse hooks
+- Or uninstall the type checker tools
+
+Type checking gracefully skips if tools aren't installed.
 
 ## Philosophy
 
