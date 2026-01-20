@@ -59,6 +59,7 @@ Hard enforcement via Claude Code hooks.
 | `/ship` | test → commit → push → PR | Ready to merge |
 | `/review` | Spawn subagent for code review | Before shipping |
 | `/inject <mode>` | Change mode | Switching contexts |
+| `/config-status` | Show all settings dashboard, explain topics, recommendations | Understanding current state |
 | `/save` | Update STATE.md + LOG.md | Preserving context |
 | `/summarize` | AI-generated summary of changes | Understanding what changed |
 | `/setup` | Create CLAUDE.md, STATE.md, .claude/ structure | New projects |
