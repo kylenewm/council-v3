@@ -188,11 +188,14 @@ Target Projects (SPOKES)
 | `~/.council/config.yaml` | Agent config (panes, worktrees) |
 | `~/.council/current_inject.txt` | Global mode |
 | `~/.council/state.json` | Runtime state (queues, circuits) |
-| `~/.council/hooks/*.sh` | Mode injection scripts |
+| `~/.council/hooks/` | Symlink → `council-v3/hooks/` (mode injection scripts) |
+| `~/.council/docs/` | Symlink → `council-v3/docs/` (framework docs) |
 | `.council/invariants.yaml` | Project path protection |
 | `.council/mode` | Project-local mode override |
 | `~/.claude/commands/` | Global slash commands |
 | `.claude/commands/` | Project commands (override global) |
+
+**Note:** `~/.council/hooks/` and `~/.council/docs/` are symlinks to council-v3. Edit in the repo, changes apply globally.
 
 ---
 
