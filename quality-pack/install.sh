@@ -93,12 +93,25 @@ MODES AVAILABLE:
     sandbox     Quick POC iteration
     scrappy     Rapid validation, brute force OK
     critical    High stakes, right over fast
-    riper       5-phase workflow (Research-Innovate-Plan-Execute-Review)
+
+RIPER WORKFLOW (via /riper:* commands):
+    /riper:strict    Activate strict RIPER protocol
+    /riper:research  Research mode (read-only)
+    /riper:innovate  Brainstorming mode (read-only)
+    /riper:plan      Create specifications (memory-bank only)
+    /riper:execute   Implement approved plan
+    /riper:review    Validate implementation
+
+TDD GUARD:
+    PreToolUse hook that warns when editing implementation code
+    without failing tests. Enforces test-first development.
+    First warning allows override on retry.
 
 AFTER INSTALLATION:
     Use /inject <mode> to switch modes
     Use /test, /commit, /done, /ship for workflows
     Use /bug, /feature, /refactor for task-specific workflows
+    Use /riper:strict to start RIPER workflow for complex tasks
 EOF
 }
 
@@ -108,6 +121,7 @@ install_global() {
     # Create directories
     mkdir -p "$HOME/.claude"
     mkdir -p "$HOME/.council/hooks/modes"
+    mkdir -p "$HOME/.council/hooks/python"
 
     # Copy global CLAUDE.md
     if [[ ! -f "$HOME/.claude/CLAUDE.md" ]] || [[ "$FORCE" == "true" ]]; then
@@ -117,20 +131,42 @@ install_global() {
         log_warn "~/.claude/CLAUDE.md exists, skipping (use --force to overwrite)"
     fi
 
-    # Copy hooks
+    # Copy shell hooks
     for hook in inject.sh auto-inject.sh type-check.sh notify-rich.sh; do
-        if [[ ! -f "$HOME/.council/hooks/$hook" ]] || [[ "$FORCE" == "true" ]]; then
-            cp "$GLOBAL_DIR/hooks/$hook" "$HOME/.council/hooks/$hook"
-            chmod +x "$HOME/.council/hooks/$hook"
-            log_info "Installed ~/.council/hooks/$hook"
-        else
-            log_warn "~/.council/hooks/$hook exists, skipping"
+        if [[ -f "$GLOBAL_DIR/hooks/$hook" ]]; then
+            if [[ ! -f "$HOME/.council/hooks/$hook" ]] || [[ "$FORCE" == "true" ]]; then
+                cp "$GLOBAL_DIR/hooks/$hook" "$HOME/.council/hooks/$hook"
+                chmod +x "$HOME/.council/hooks/$hook"
+                log_info "Installed ~/.council/hooks/$hook"
+            else
+                log_warn "~/.council/hooks/$hook exists, skipping"
+            fi
         fi
     done
 
-    # Copy mode scripts
+    # Copy Python hooks (TDD Guard, file checker, etc.)
+    if [[ -d "$GLOBAL_DIR/hooks/python" ]]; then
+        for py_hook in "$GLOBAL_DIR/hooks/python/"*.py; do
+            if [[ -f "$py_hook" ]]; then
+                hook_name=$(basename "$py_hook")
+                if [[ ! -f "$HOME/.council/hooks/python/$hook_name" ]] || [[ "$FORCE" == "true" ]]; then
+                    cp "$py_hook" "$HOME/.council/hooks/python/$hook_name"
+                    chmod +x "$HOME/.council/hooks/python/$hook_name"
+                    log_info "Installed ~/.council/hooks/python/$hook_name"
+                else
+                    log_warn "~/.council/hooks/python/$hook_name exists, skipping"
+                fi
+            fi
+        done
+    fi
+
+    # Copy mode scripts (excluding riper.sh - RIPER is now commands/agents based)
     for mode_script in "$GLOBAL_DIR/hooks/modes/"*.sh; do
         mode_name=$(basename "$mode_script")
+        # Skip riper.sh - RIPER workflow uses commands/agents now
+        if [[ "$mode_name" == "riper.sh" ]]; then
+            continue
+        fi
         if [[ ! -f "$HOME/.council/hooks/modes/$mode_name" ]] || [[ "$FORCE" == "true" ]]; then
             cp "$mode_script" "$HOME/.council/hooks/modes/$mode_name"
             chmod +x "$HOME/.council/hooks/modes/$mode_name"
@@ -147,7 +183,7 @@ install_project() {
     log_info "Setting up project in current directory..."
 
     # Create directories
-    mkdir -p .claude/commands .claude/agents .council
+    mkdir -p .claude/commands/riper .claude/agents .council .claude/memory-bank
 
     # Copy settings.json
     if [[ ! -f ".claude/settings.json" ]] || [[ "$FORCE" == "true" ]]; then
@@ -167,6 +203,21 @@ install_project() {
             log_warn ".claude/commands/$cmd_name exists, skipping"
         fi
     done
+
+    # Copy RIPER commands (subcommands like /riper:strict, /riper:research, etc.)
+    if [[ -d "$PROJECT_DIR/commands/riper" ]]; then
+        for cmd in "$PROJECT_DIR/commands/riper/"*.md; do
+            if [[ -f "$cmd" ]]; then
+                cmd_name=$(basename "$cmd")
+                if [[ ! -f ".claude/commands/riper/$cmd_name" ]] || [[ "$FORCE" == "true" ]]; then
+                    cp "$cmd" ".claude/commands/riper/$cmd_name"
+                    log_info "Installed .claude/commands/riper/$cmd_name"
+                else
+                    log_warn ".claude/commands/riper/$cmd_name exists, skipping"
+                fi
+            fi
+        done
+    fi
 
     # Copy agents
     for agent in "$PROJECT_DIR/agents/"*.md; do
