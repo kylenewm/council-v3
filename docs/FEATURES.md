@@ -69,8 +69,6 @@ Hard enforcement via Claude Code hooks.
 
 | Command | What It Does | When |
 |---------|--------------|------|
-| `/quick-commit` | Stage all + commit with descriptive message | Fast commits |
-| `/commit-push-pr` | Commit, push, open PR | Quick ship |
 | `/review-changes` | Review uncommitted changes | Before committing |
 | `/test-and-fix` | Run tests, fix failures | Iterating on fixes |
 | `/first-principles` | Deconstruct problem to fundamentals | When stuck or overcomplicated |
