@@ -1,15 +1,6 @@
 # Council v3
 
-Most AI coding setups use one model, run one task at a time, and require you at the keyboard. Council v3 changes that.
-
-**Core capabilities:**
-- **Parallel agents** — Run multiple Claude Code instances across projects with task queuing
-- **Multi-model planning** — Multiple models draft independently, critique each other, synthesize
-- **Voice/phone input** — Send commands via Telegram, get notifications via Pushover
-- **Auto-continue** — Circuit breaker catches stuck loops, keeps work moving unattended
-- **Mode injection** — Context injection (strict, sandbox, plan, review) controls agent behavior
-- **Quality hooks** — TDD enforcement, auto-formatting, lint checks
-- **Plugins** — Ralph loop/queue for long-running and batched tasks
+Dispatcher for running multiple Claude Code agents in tmux panes. Routes commands from voice (via socket), Telegram, or Pushover to agents. Includes task queuing, auto-continue with circuit breaker, and mode injection for controlling agent behavior.
 
 ## Demo
 
