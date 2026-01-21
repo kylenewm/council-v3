@@ -33,6 +33,15 @@ Thumbs.db
 # Local config (don't commit secrets)
 .claude/settings.local.json
 
+# Project-specific council settings (users set their own)
+.council/mode
+.council/framework
+.council/invariants.yaml
+
+# Session/debugging notes
+docs/SESSION_SUMMARY.md
+docs/NOTIFICATION_*.md
+
 # Personal/working docs
 CLAUDE-RESEARCH.md
 docs/STARTUP_VISION.md
