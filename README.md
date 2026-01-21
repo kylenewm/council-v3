@@ -1,6 +1,16 @@
 # Council v3
 
-Dispatcher for running multiple Claude Code agents in tmux panes. Routes commands from voice (via socket), Telegram, or Pushover to agents. Includes task queuing, auto-continue with circuit breaker, and mode injection for controlling agent behavior.
+Multi-agent orchestration for Claude Code.
+
+- **Dispatcher** — Routes commands to Claude Code instances running in tmux panes
+- **Input sources** — Unix socket (for voice via Shortcuts/Wispr), Telegram bot, Pushover
+- **Task queue** — Queue tasks per agent, auto-dequeue when ready
+- **Auto-continue** — Keeps agents working with circuit breaker (git-based progress detection)
+- **Mode injection** — Inject context (strict/sandbox/plan/review) to control behavior
+- **Quality hooks** — TDD enforcement, auto-formatting, lint checks via Claude Code hooks
+- **Slash commands** — `/test`, `/commit`, `/ship`, `/review`, `/inject`, and more
+- **LLM Council** — Optional multi-model planning (draft → critique → synthesize)
+- **Plugins** — Ralph loop/queue for long-running and batched tasks
 
 ## Demo
 
