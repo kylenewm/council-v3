@@ -1,0 +1,15 @@
+╭─────────────────────────────────────────────────────────────────────────────╮
+│ ○ Claude Sonnet 3.5                                Tips: ? for shortcuts    │
+╰─────────────────────────────────────────────────────────────────────────────╯
+
+  Do you want to proceed with the file modification?
+
+  This will update 3 files:
+  - src/config.ts
+  - src/utils/parser.ts
+  - tests/parser.test.ts
+
+  ❯ Yes
+    No
+
+  Esc to cancel

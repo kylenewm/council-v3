@@ -3,7 +3,7 @@
 Council Dispatcher v3 - Simplified voice/phone to agent routing.
 
 What it does:
-- Routes commands from FIFO (voice), Pushover (phone), Telegram to tmux panes
+- Routes commands from socket (voice), Pushover (phone), Telegram to tmux panes
 - Monitors agent state (ready/working/dialog)
 - Auto-continue with circuit breaker (git-based progress detection)
 - Notifications (Mac + Pushover)
@@ -116,158 +116,6 @@ except ImportError:
 from council.dispatcher.socket_server import SocketServer
 
 
-class FifoReader:
-    """
-    Non-blocking FIFO reader using raw file descriptors.
-
-    Solves the fundamental problems with select() + buffered Python file objects:
-    - Uses O_RDONLY | O_NONBLOCK (proper EOF detection, no blocking)
-    - Manual line buffering with os.read() (no hidden Python buffer)
-    - Explicit EAGAIN handling (no silent failures)
-    - Clean reopen on EOF (when writers close)
-    """
-
-    def __init__(self, fifo_path: str, read_size: int = 4096):
-        self.fifo_path = fifo_path
-        self.read_size = read_size
-        self.fd: Optional[int] = None
-        self._buffer = b""
-        self._debug_log: Optional[object] = None
-
-    def enable_debug(self, log_path: str = "/tmp/fifo_debug.log"):
-        """Enable debug logging to a file."""
-        self._debug_log = open(log_path, "w")
-
-    def _log(self, msg: str):
-        """Write debug log if enabled."""
-        if self._debug_log:
-            self._debug_log.write(f"{time.time()}: {msg}\n")
-            self._debug_log.flush()
-
-    def open(self) -> bool:
-        """
-        Open the FIFO for reading.
-
-        Uses O_RDONLY | O_NONBLOCK:
-        - O_RDONLY: Blocks until a writer opens (desired behavior)
-        - O_NONBLOCK: Subsequent reads won't block
-
-        Returns True if opened successfully.
-        """
-        if self.fd is not None:
-            return True
-
-        try:
-            # O_RDONLY blocks until writer connects (good - avoids busy loop)
-            # O_NONBLOCK makes subsequent reads non-blocking
-            self.fd = os.open(self.fifo_path, os.O_RDONLY | os.O_NONBLOCK)
-            self._buffer = b""
-            self._log(f"opened fd={self.fd}")
-            return True
-        except OSError as e:
-            self._log(f"open failed: {e}")
-            return False
-
-    def close(self):
-        """Close the FIFO."""
-        if self.fd is not None:
-            try:
-                os.close(self.fd)
-                self._log(f"closed fd={self.fd}")
-            except OSError:
-                pass
-            self.fd = None
-            self._buffer = b""
-
-        if self._debug_log:
-            try:
-                self._debug_log.close()
-            except Exception:
-                pass
-            self._debug_log = None
-
-    def read_lines(self, timeout: float = 0.5) -> list[str]:
-        """
-        Read available lines from the FIFO.
-
-        Uses select() for efficient waiting, then os.read() for non-blocking reads.
-        Returns a list of complete lines (without newlines).
-        Incomplete lines are buffered for next call.
-
-        Returns empty list if:
-        - No data available within timeout
-        - FIFO not open
-        - Error occurred (will auto-reopen)
-        """
-        if self.fd is None:
-            if not self.open():
-                return []
-
-        lines = []
-
-        try:
-            # Wait for data with select (works correctly with raw fd)
-            readable, _, _ = select.select([self.fd], [], [], timeout)
-
-            if not readable:
-                return lines
-
-            self._log("select: readable")
-
-            # Read available data
-            while True:
-                try:
-                    data = os.read(self.fd, self.read_size)
-                    self._log(f"os.read: {len(data)} bytes")
-
-                    if not data:
-                        # EOF - all writers closed
-                        self._log("EOF detected, reopening")
-                        self._reopen()
-                        break
-
-                    self._buffer += data
-
-                except OSError as e:
-                    if e.errno in (errno.EAGAIN, errno.EWOULDBLOCK):
-                        # No more data available right now
-                        self._log("EAGAIN - no more data")
-                        break
-                    else:
-                        # Real error
-                        self._log(f"read error: {e}")
-                        self._reopen()
-                        break
-
-            # Extract complete lines from buffer
-            while b"\n" in self._buffer:
-                line, self._buffer = self._buffer.split(b"\n", 1)
-                try:
-                    decoded = line.decode("utf-8").strip()
-                    if decoded:  # Skip empty lines
-                        lines.append(decoded)
-                        self._log(f"line: {decoded!r}")
-                except UnicodeDecodeError:
-                    self._log(f"decode error: {line!r}")
-                    # Skip malformed data
-
-        except Exception as e:
-            self._log(f"unexpected error: {e}")
-            self._reopen()
-
-        return lines
-
-    def _reopen(self):
-        """Close and prepare for reopen on next read."""
-        if self.fd is not None:
-            try:
-                os.close(self.fd)
-            except OSError:
-                pass
-            self.fd = None
-        # Keep buffer - might have partial line
-
-
 @dataclass
 class Agent:
     """An agent running in a tmux pane."""
@@ -317,8 +165,7 @@ class Config:
     """Dispatcher configuration."""
     agents: dict[int, Agent]
     poll_interval: float = 2.0
-    socket_path: Optional[Path] = None  # Unix domain socket (preferred)
-    fifo_path: Optional[Path] = None  # Legacy FIFO (deprecated)
+    socket_path: Optional[Path] = None  # Unix domain socket
     input_pane: Optional[str] = None
     # Pushover (outbound notifications)
     pushover_user_key: Optional[str] = None
@@ -1281,10 +1128,6 @@ def validate_config(config: Config) -> list[str]:
         if not config.telegram_allowed_user_ids:
             warnings.append("Telegram: bot_token set but no allowed_user_ids - no users can send commands")
 
-    # --- FIFO (if configured) ---
-    if config.fifo_path and not config.fifo_path.exists():
-        warnings.append(f"FIFO not found: {config.fifo_path} (create with: mkfifo {config.fifo_path})")
-
     if errors:
         raise ConfigValidationError("\n".join(errors))
 
@@ -1331,27 +1174,16 @@ def load_config(path: Path) -> Config:
             mode=agent_cfg.get("mode", "default"),
         )
 
-    # Socket path (preferred) - default to ~/.council/council.sock
-    socket_path = None
+    # Socket path - default to ~/.council/council.sock
+    socket_path = Path.home() / ".council" / "council.sock"
     if raw.get("socket_path"):
         socket_path = Path(os.path.expanduser(raw["socket_path"]))
-    elif not raw.get("fifo_path"):
-        # Default to socket if neither specified
-        socket_path = Path.home() / ".council" / "council.sock"
-
-    # Legacy FIFO path (deprecated)
-    fifo_path = None
-    if raw.get("fifo_path"):
-        fifo_path = Path(os.path.expanduser(raw["fifo_path"]))
-        if not socket_path:
-            print("[WARN] fifo_path is deprecated, use socket_path instead")
 
     pushover = raw.get("pushover", {})
     return Config(
         agents=agents,
         poll_interval=raw.get("poll_interval", 2.0),
         socket_path=socket_path,
-        fifo_path=fifo_path,
         input_pane=raw.get("input_pane"),
         pushover_user_key=pushover.get("user_key"),
         pushover_api_token=pushover.get("api_token"),
@@ -1770,63 +1602,6 @@ def run_with_socket(config: Config, pushover_client: Optional[PushoverClient] = 
         socket_server.stop()
 
 
-def run_with_fifo(config: Config, pushover_client: Optional[PushoverClient] = None):
-    """Run dispatcher reading from FIFO using non-blocking I/O."""
-    fifo_path = config.fifo_path
-    print(f"Reading from FIFO: {fifo_path}")
-
-    last_poll = time.time()
-
-    # Use the new non-blocking FIFO reader
-    fifo_reader = FifoReader(fifo_path)
-    fifo_reader.enable_debug()  # Logs to /tmp/fifo_debug.log
-
-    try:
-        # Initial open - this will block until a writer connects
-        # which is correct behavior (avoids busy loop)
-        print("Waiting for FIFO writer...")
-        if not fifo_reader.open():
-            print(f"Error: Could not open FIFO {fifo_path}")
-            return
-        print("FIFO connected")
-
-        while True:
-            # Read all available lines (non-blocking with 0.5s timeout)
-            for line in fifo_reader.read_lines(timeout=0.5):
-                print(f"[FIFO] {line}")
-                if not process_line(line, config):
-                    return
-
-            # Poll Pushover
-            if pushover_client:
-                for cmd in pushover_poll(pushover_client, config):
-                    print(f"[PUSHOVER CMD] {cmd}")
-                    if not process_line(cmd, config):
-                        return
-
-            # Poll command queue (Telegram)
-            while True:
-                try:
-                    source, cmd = _command_queue.get_nowait()
-                    print(f"[{source.upper()} CMD] {cmd}")
-                    if not process_line(cmd, config):
-                        return
-                except queue.Empty:
-                    break
-
-            # Periodic agent check
-            if time.time() - last_poll >= config.poll_interval:
-                changes = check_agents(config)
-                for change in changes:
-                    print(f"[{time.strftime('%H:%M:%S')}] {change}")
-                last_poll = time.time()
-
-    except KeyboardInterrupt:
-        print("\nBye!")
-    finally:
-        fifo_reader.close()
-
-
 def run_with_stdin(config: Config, pushover_client: Optional[PushoverClient] = None):
     """Run dispatcher reading from stdin."""
     print("Ready. Type commands (or 'help'):\n")
@@ -1994,17 +1769,10 @@ poll_interval: 2.0
     check_agents(config)
     show_status(config)
 
-    # Run - prefer socket over FIFO over stdin
+    # Run - prefer socket over stdin
     if config.socket_path:
         run_with_socket(config, pushover_client)
-    elif config.fifo_path and config.fifo_path.exists():
-        print("[WARN] Using deprecated FIFO mode. Migrate to socket_path.")
-        run_with_fifo(config, pushover_client)
     else:
-        if config.fifo_path:
-            print(f"FIFO not found: {config.fifo_path}")
-            print(f"Create it with: mkfifo {config.fifo_path}")
-            print("Falling back to stdin mode.\n")
         run_with_stdin(config, pushover_client)
 
 

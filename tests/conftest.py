@@ -25,7 +25,7 @@ def sample_config(sample_agent):
     return Config(
         agents={1: sample_agent},
         poll_interval=2.0,
-        fifo_path=Path("/tmp/test.fifo"),
+        socket_path=Path("/tmp/test.sock"),
     )
 
 

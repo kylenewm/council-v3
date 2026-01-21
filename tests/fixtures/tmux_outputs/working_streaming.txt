@@ -1,0 +1,18 @@
+╭─────────────────────────────────────────────────────────────────────────────╮
+│ ○ Claude Sonnet 3.5                                Tips: ? for shortcuts    │
+╰─────────────────────────────────────────────────────────────────────────────╯
+
+  I'll help you implement that feature. Let me start by examining the
+  codebase structure...
+
+  Looking at the existing implementation in `src/utils/parser.ts`:
+
+  ```typescript
+  export function parseConfig(input: string): Config {
+    const lines = input.split('\n');
+    const result: Config = {};
+
+    for (const line of lines) {
+      const [key, value] = line.split('=');
+      if (key && value) {
+        result[key.trim()] = value.trim();

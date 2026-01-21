@@ -230,29 +230,6 @@ class TestConditionalValidation:
         assert warnings == []
 
     @patch("council.dispatcher.simple.tmux_pane_exists")
-    def test_fifo_missing_warns(self, mock_pane_exists):
-        """Missing FIFO path warns."""
-        mock_pane_exists.return_value = True
-        config = Config(
-            agents={1: Agent(id=1, pane_id="%0", name="Agent 1")},
-            fifo_path=Path("/nonexistent/fifo/path"),
-        )
-        warnings = validate_config(config)
-        assert len(warnings) == 1
-        assert "FIFO not found" in warnings[0]
-
-    @patch("council.dispatcher.simple.tmux_pane_exists")
-    def test_fifo_exists_passes(self, mock_pane_exists):
-        """Existing FIFO path passes."""
-        mock_pane_exists.return_value = True
-        config = Config(
-            agents={1: Agent(id=1, pane_id="%0", name="Agent 1")},
-            fifo_path=Path("/tmp"),  # /tmp exists
-        )
-        warnings = validate_config(config)
-        assert warnings == []
-
-    @patch("council.dispatcher.simple.tmux_pane_exists")
     def test_no_optional_config_passes(self, mock_pane_exists):
         """Config without optional features passes."""
         mock_pane_exists.return_value = True

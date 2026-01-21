@@ -1,27 +1,35 @@
 # Council v3
 
-Most AI coding setups use one model, run one task at a time, and require you at the keyboard. This limits impact in a time where software development and product management are rapidly transforming.
+Most AI coding setups use one model, run one task at a time, and require you at the keyboard. Council v3 changes that.
 
-Council v3 adds:
-- **Multi-model planning** — Multiple models draft independently, critique each other, then synthesize a final plan
+**Core capabilities:**
 - **Parallel agents** — Run multiple Claude Code instances across projects with task queuing
+- **Multi-model planning** — Multiple models draft independently, critique each other, synthesize
 - **Voice/phone input** — Send commands via Telegram, get notifications via Pushover
-- **Auto-continue** — Circuit breaker catches stuck loops, keeps work moving without babysitting
+- **Auto-continue** — Circuit breaker catches stuck loops, keeps work moving unattended
+- **Mode injection** — Context injection (strict, sandbox, plan, review) controls agent behavior
+- **Quality hooks** — TDD enforcement, auto-formatting, lint checks
+- **Plugins** — Ralph loop/queue for long-running and batched tasks
 
-## Visual Overview:
+## Demo
 
 https://github.com/user-attachments/assets/2b279dc6-2026-4c22-aab2-2c879b29f730
 
+*Note: This demo shows an earlier version with just tmux panes and Pushover notifications. Current version includes mode injection, quality hooks, plugins, and more.*
 
 ## Architecture
 
 ```
-Inputs (Voice/Telegram/CLI) → LLM Council → Dispatcher → Agents (tmux) → Outputs (Notifications/Git)
+Inputs (Voice/Telegram/Socket) → Dispatcher → Agents (tmux) → Outputs (Notifications/Git)
+                                     ↑
+                              LLM Council (optional multi-model planning)
 ```
 
-**Detailed docs:** [Architecture & Execution Traces](docs/ARCHITECTURE.md)
+**Full feature list:** [docs/FEATURES.md](docs/FEATURES.md)
 
-## Setup
+---
+
+## Quick Start
 
 ### 1. Install
 
@@ -50,13 +58,13 @@ agents:
     name: "Agent2"
     worktree: ~/projects/project2
 
-fifo_path: ~/.council/in.fifo
+socket_path: ~/.council/council.sock
 
-pushover:  # Optional - for phone notifications
+pushover:  # Optional - phone notifications
   user_key: "your-user-key"
   api_token: "your-api-token"
 
-telegram:  # Optional - for voice/phone commands
+telegram:  # Optional - voice/phone commands
   bot_token: "your-bot-token"
   allowed_user_ids: [123456789]
 ```
@@ -66,7 +74,6 @@ telegram:  # Optional - for voice/phone commands
 ```bash
 tmux new-session -d -s council
 tmux split-window -h
-# Add more panes as needed for more agents
 tmux attach -t council
 ```
 
@@ -76,44 +83,80 @@ tmux attach -t council
 python -m council.dispatcher.simple
 ```
 
-## Commands
+---
+
+## Dispatcher Commands
 
 | Command | What |
 |---------|------|
 | `1: <text>` | Send to agent 1 |
-| `1: t1 \| t2` | Queue multiple tasks |
+| `queue 1 "task"` | Add task to agent's queue |
+| `queue 1` | Show queue |
 | `status` | Show all agents |
 | `auto 1` / `stop 1` | Toggle auto-continue |
 | `reset 1` | Reset circuit breaker |
 
-## Module Inventory
+Send via socket:
+```bash
+echo "1: do something" | nc -U ~/.council/council.sock
+```
 
-| File | Purpose |
+---
+
+## Slash Commands (in Claude Code)
+
+| Command | What |
+|---------|------|
+| `/test` | Run tests (auto-detects framework) |
+| `/done` | Verify before marking complete |
+| `/commit` | Stage and commit |
+| `/ship` | test → commit → push → PR |
+| `/review` | Code review via subagent |
+| `/inject <mode>` | Set mode (strict/sandbox/plan/review) |
+
+**Full command list:** [docs/FEATURES.md](docs/FEATURES.md#slash-commands)
+
+---
+
+## Mode Injection
+
+Control agent behavior by injecting context into prompts.
+
+| Mode | Purpose |
 |------|---------|
-| `council/council.py` | Multi-model draft, critique, synthesis |
-| `council/client.py` | OpenRouter API client |
-| `council/cli.py` | CLI commands |
-| `council/dispatcher/simple.py` | Main dispatcher (routing, queue, circuit breaker) |
-| `council/dispatcher/telegram.py` | Telegram bot |
-| `council/dispatcher/gitwatch.py` | Git progress detection |
+| `strict` | Production: verify before done, don't touch scope |
+| `sandbox` | Fast iteration, fixtures OK, skip edge cases |
+| `plan` | Design before building, wait for approval |
+| `review` | Adversarial critique, requires evidence |
+
+```bash
+/inject strict          # Set mode
+echo "sandbox" > .council/mode  # Project-local override
+```
+
+---
 
 ## Debugging
 
-Logs are written to `~/.council/logs/YYYY-MM-DD.jsonl`. Quick queries:
+Logs: `~/.council/logs/YYYY-MM-DD.jsonl`
 
 ```bash
-# Last 50 events
 tail -50 ~/.council/logs/$(date +%Y-%m-%d).jsonl | jq .
-
-# Errors only
-grep '"result":"error"' ~/.council/logs/*.jsonl | jq .
-
-# Events for agent 1
-grep '"agent_id":1' ~/.council/logs/$(date +%Y-%m-%d).jsonl | jq .
 ```
 
 ## Testing
 
 ```bash
-pytest tests/ -v  # 114 tests
+pytest tests/ -v
 ```
+
+---
+
+## Documentation
+
+| Doc | What |
+|-----|------|
+| [FEATURES.md](docs/FEATURES.md) | Complete feature reference |
+| [SYSTEM_REFERENCE.md](docs/SYSTEM_REFERENCE.md) | Quick reference cheat sheet |
+| [ARCHITECTURE.md](docs/ARCHITECTURE.md) | Architecture & execution traces |
+| [OPERATING_GUIDE.md](docs/OPERATING_GUIDE.md) | Full operating guide |

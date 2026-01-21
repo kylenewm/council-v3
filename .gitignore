@@ -55,10 +55,11 @@ docs/codeflow-integration.md
 
 # Large media files (hosted on GitHub assets instead)
 docs/demo.mp4
+
+# Session-specific (not committed)
 REFLECTIONS.md
 LOG.md
 STATE.md
-QUIRKS.md
 specs/
 sandbox/
 *.local.json

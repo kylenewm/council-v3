@@ -1,0 +1,12 @@
+╭─────────────────────────────────────────────────────────────────────────────╮
+│ ○ Claude Sonnet 3.5                                Tips: ? for shortcuts    │
+╰─────────────────────────────────────────────────────────────────────────────╯
+
+  I found multiple potential implementations. Which approach would you prefer?
+
+  ❯ 1. Use the existing utility function (recommended)
+    2. Create a new helper class
+    3. Inline the logic directly
+    4. Other (please specify)
+
+  Esc to cancel

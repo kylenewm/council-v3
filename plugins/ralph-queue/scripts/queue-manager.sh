@@ -45,15 +45,13 @@ init_queue() {
     fi
 }
 
-# Add tasks to queue (pipe-separated)
-# Usage: queue-manager.sh add "task1 | task2 | task3" [--max-iterations N] [--completion-promise TEXT]
+# Add tasks to queue (each quoted argument is a task)
+# Usage: queue-manager.sh add "task1" "task2" "task3" [--max-iterations N] [--completion-promise TEXT]
 add_tasks() {
     init_queue
 
-    local tasks_str="$1"
-    shift
-
-    # Parse optional args
+    # Collect tasks and parse options
+    local tasks=()
     local max_iterations="10"
     local completion_promise="DONE"
 
@@ -68,22 +66,24 @@ add_tasks() {
                 shift 2
                 ;;
             *)
+                # Everything else is a task
+                tasks+=("$1")
                 shift
                 ;;
         esac
     done
 
-    # Handle escaped pipes: replace \| with placeholder before splitting
-    local PIPE_PLACEHOLDER="__PIPE_CHAR__"
-    tasks_str="${tasks_str//\\|/$PIPE_PLACEHOLDER}"
+    if [[ ${#tasks[@]} -eq 0 ]]; then
+        echo "ERROR: No tasks provided"
+        echo "Usage: queue-manager.sh add \"task1\" \"task2\" [--max-iterations N]"
+        exit 1
+    fi
 
-    # Split by pipe and add each task
-    IFS='|' read -ra TASKS <<< "$tasks_str"
-
-    for task in "${TASKS[@]}"; do
-        # Trim whitespace and restore escaped pipes
+    for task in "${tasks[@]}"; do
+        # Trim whitespace and quotes
         task=$(echo "$task" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-        task="${task//$PIPE_PLACEHOLDER/|}"
+        task="${task#\"}"  # Remove leading quote
+        task="${task%\"}"  # Remove trailing quote
 
         if [[ -n "$task" ]]; then
             # Add task to queue
