@@ -13,7 +13,7 @@ Add tasks to the Ralph queue for sequential execution. Each task should be quote
 First, add tasks to the queue:
 
 ```!
-"${CLAUDE_PLUGIN_ROOT}/scripts/queue-manager.sh" add "$ARGUMENTS"
+eval "${CLAUDE_PLUGIN_ROOT}/scripts/queue-manager.sh" add $ARGUMENTS
 ```
 
 ## Next Steps
