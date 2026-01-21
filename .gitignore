@@ -60,6 +60,8 @@ docs/demo.mp4
 REFLECTIONS.md
 LOG.md
 STATE.md
+QUIRKS.md
 specs/
+tests/fixtures/tmux_outputs/
 sandbox/
 *.local.json
