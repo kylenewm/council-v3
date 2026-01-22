@@ -4,7 +4,7 @@
 # Activated via: /inject scrappy
 
 cat << 'EOF'
-[CONTEXT INJECTION - SCRAPPY MODE]
+[MODE: SCRAPPY]
 Fast AND thorough. Brute force is fine. Use more compute.
 
 SKIP:

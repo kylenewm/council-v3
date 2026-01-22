@@ -125,14 +125,17 @@ Control agent behavior by injecting context into prompts.
 
 | Mode | Purpose |
 |------|---------|
-| `strict` | Production: verify before done, don't touch scope |
-| `sandbox` | Fast iteration, fixtures OK, skip edge cases |
+| `research` | Collaborative brainstorming, preserve content, stay in phase |
 | `plan` | Design before building, wait for approval |
+| `sandbox` | Fast POC iteration, fixtures OK, experimentation |
+| `scrappy` | Rapid validation, brute force OK, scale aggressively |
+| `strict` | Procedures + paths + DONE_REPORT, no mindset |
+| `production` | Full rigor: mindset + procedures + paths + DONE_REPORT |
 | `review` | Adversarial critique, requires evidence |
 
 ```bash
 /inject strict          # Set mode
-echo "sandbox" > .council/mode  # Project-local override
+echo "research" > .council/mode  # Project-local override
 ```
 
 ---

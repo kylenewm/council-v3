@@ -19,19 +19,21 @@ Complete feature list with what it does, how to use it, and when.
 
 Inject context into every prompt to control Claude's behavior.
 
+**Architecture:** `inject.sh` → `global.sh` (always) + `modes/{mode}.sh` + `framework.sh` (if set)
+
 | Mode | What It Does | How to Use | When |
 |------|--------------|------------|------|
-| `strict` | DONE_REPORT required, don't touch scope, verify before done | `/inject strict` | Production code |
-| `production` | Strict + "Right > Fast" mindset + forbidden/protected paths | `/inject production` | Real users depend on this |
+| `research` | Collaborative brainstorming, preserve content, stay in phase | `/inject research` | Information gathering, planning discussions |
 | `plan` | Design before building, output structured plan, wait for approval | `/inject plan` | Complex features, architecture |
+| `sandbox` | Fast POC iteration, fixtures OK, experimentation allowed | `/inject sandbox` | Prototyping, experiments |
+| `scrappy` | Rapid validation, brute force OK, scale aggressively | `/inject scrappy` | Quick validation, bulk operations |
+| `strict` | Procedures + paths + DONE_REPORT, evidence over narrative | `/inject strict` | Production code (no mindset content) |
+| `production` | Full rigor: mindset + procedures + paths + DONE_REPORT | `/inject production` | Real users depend on this |
 | `review` | Adversarial context-blind critique, requires evidence | `/inject review` | Code review, pre-merge |
-| `critical` | High stakes, be thorough, resist rushing | `/inject critical` | Critical systems |
-| `sandbox` | Fast POC iteration, fixtures OK, skip edge cases | `/inject sandbox` | Prototyping, experiments |
-| `scrappy` | Rapid validation, brute force OK | `/inject scrappy` | Quick validation |
 | `off` | Disable mode injection (global rules still apply) | `/inject off` | When modes get in the way |
 
-**Set locally:** `echo "sandbox" > .council/mode`
-**Set globally:** `/inject strict` or `echo "strict" > ~/.council/current_inject.txt`
+**Set locally:** `echo "research" > .council/mode`
+**Set globally:** `echo "strict" > ~/.council/mode`
 
 ---
 
@@ -170,10 +172,14 @@ Notifications fire when agent completes task or circuit breaker opens.
 |------|---------|
 | `~/.council/config.yaml` | Agent config (panes, worktrees, notifications) |
 | `~/.council/state.json` | Runtime state (queues, circuit breakers) |
-| `~/.council/hooks/*.sh` | Mode injection scripts |
-| `~/.council/hooks/python/*.py` | Quality hooks (TDD Guard, File Checker) |
+| `~/.council/mode` | Global mode setting |
+| `~/.council/hooks/inject.sh` | Main injection router |
+| `~/.council/hooks/global.sh` | Minimal universal rules (all modes) |
+| `~/.council/hooks/modes/*.sh` | Mode-specific scripts |
+| `~/.council/hooks/framework.sh` | Build framework injection |
 | `.council/invariants.yaml` | Project path protection |
-| `.council/mode` | Project-local mode override |
+| `.council/mode` | Project-local mode override (takes precedence) |
+| `.council/framework` | Project build framework |
 | `CLAUDE.md` | Project instructions |
 | `STATE.md` | Current work state |
 

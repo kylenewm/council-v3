@@ -1,11 +1,14 @@
 #!/bin/bash
 # Plan mode - design before building
 # For complex features, architectural changes, multi-step tasks
-# Activated via: /inject plan
 
 cat << 'EOF'
-[CONTEXT INJECTION - PLAN MODE]
-Thoroughness over speed. Design before building.
+[MODE: PLAN]
+
+MINDSET:
+- Thoroughness over speed
+- Design before building
+- Present options with tradeoffs
 
 BEFORE any code:
 1. Break into phases with clear deliverables
@@ -24,7 +27,6 @@ PHASE STRUCTURE:
 OUTPUT:
 - Structured plan document
 - Wait for approval before implementing
-- Present options with tradeoffs if uncertain
 
 A good plan prevents wasted work.
 EOF

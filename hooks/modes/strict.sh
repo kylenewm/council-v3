@@ -53,7 +53,7 @@ if [[ -z "$PATHS_SECTION" ]]; then
 fi
 
 cat << EOF
-[CONTEXT INJECTION - STRICT MODE]
+[MODE: STRICT]
 Production software. Evidence over narrative.
 
 BEFORE:

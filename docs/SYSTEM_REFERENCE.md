@@ -8,29 +8,39 @@ Quick reference cheat sheet. Read this when context is lost.
 
 ## Mode Injection
 
+**Architecture:**
+```
+inject.sh (router)
+├── global.sh              ← always (push back, investigate)
+├── modes/{mode}.sh        ← based on .council/mode
+└── framework.sh           ← if .council/framework set
+```
+
 **Precedence (LOCAL overrides GLOBAL):**
 ```
-1. .council/mode              ← project-local, checked FIRST
-2. ~/.council/current_inject.txt  ← global fallback
+1. .council/mode     ← project-local, checked FIRST
+2. ~/.council/mode   ← global fallback
+3. default: strict   ← if no mode file exists
 ```
 
 ```bash
 # Set locally (one project)
-echo "sandbox" > .council/mode
+echo "research" > .council/mode
 
 # Set globally (all projects)
-/inject strict
-# OR: echo "strict" > ~/.council/current_inject.txt
+echo "strict" > ~/.council/mode
 ```
 
 | Mode | Purpose |
 |------|---------|
-| `strict` | Production: DONE_REPORT required, don't touch scope |
-| `poc` | POC: fast iteration, fixtures, skip edge cases |
-| `plan` | Design: plan before building |
-| `review` | Adversarial: context-blind review |
-| `critical` | High stakes: be right, be thorough, resist rushing |
-| `off` | No injection (global rules still apply) |
+| `research` | Collaborative brainstorming, preserve content, stay in phase |
+| `plan` | Design: plan before building, wait for approval |
+| `sandbox` | POC: fast iteration, fixtures, experimentation |
+| `scrappy` | Rapid validation, brute force OK, scale aggressively |
+| `strict` | Procedures + paths + DONE_REPORT (no mindset) |
+| `production` | Full rigor: mindset + procedures + paths + DONE_REPORT |
+| `review` | Adversarial: context-blind review, requires evidence |
+| `off` | No mode injection (global rules still apply) |
 
 ---
 
@@ -167,16 +177,24 @@ council bootstrap PLAN.md                  # Generate files
 ## Hub/Spoke Architecture
 
 ```
-Council-v3 (HUB)
-├── Dispatcher (simple.py)
-├── Scripts (check_invariants.py, audit_done.py)
-├── Templates
-└── Skills (/enforce, /inject, /setup)
+~/.council/hooks/ (HUB)
+├── inject.sh           ← main router
+├── global.sh           ← universal rules
+├── modes/
+│   ├── research.sh
+│   ├── plan.sh
+│   ├── sandbox.sh
+│   ├── scrappy.sh
+│   ├── strict.sh
+│   ├── production.sh
+│   └── review.sh
+└── framework.sh
 
 Target Projects (SPOKES)
-├── .council/invariants.yaml
-├── .council/mode (optional)
-└── .git/hooks/pre-commit → calls hub's script
+├── .council/mode           ← project mode override
+├── .council/framework      ← project build framework
+├── .council/invariants.yaml ← path protection
+└── .git/hooks/pre-commit
 ```
 
 ---
@@ -186,16 +204,17 @@ Target Projects (SPOKES)
 | File | Purpose |
 |------|---------|
 | `~/.council/config.yaml` | Agent config (panes, worktrees) |
-| `~/.council/current_inject.txt` | Global mode |
+| `~/.council/mode` | Global mode setting |
 | `~/.council/state.json` | Runtime state (queues, circuits) |
-| `~/.council/hooks/` | Symlink → `council-v3/hooks/` (mode injection scripts) |
-| `~/.council/docs/` | Symlink → `council-v3/docs/` (framework docs) |
+| `~/.council/hooks/inject.sh` | Main injection router |
+| `~/.council/hooks/global.sh` | Minimal universal rules |
+| `~/.council/hooks/modes/*.sh` | Mode-specific scripts |
+| `~/.council/hooks/framework.sh` | Build framework injection |
 | `.council/invariants.yaml` | Project path protection |
 | `.council/mode` | Project-local mode override |
+| `.council/framework` | Project build framework |
 | `~/.claude/commands/` | Global slash commands |
 | `.claude/commands/` | Project commands (override global) |
-
-**Note:** `~/.council/hooks/` and `~/.council/docs/` are symlinks to council-v3. Edit in the repo, changes apply globally.
 
 ---
 
@@ -223,7 +242,7 @@ Target Projects (SPOKES)
 
 ```bash
 # Current mode
-cat .council/mode 2>/dev/null || cat ~/.council/current_inject.txt
+cat .council/mode 2>/dev/null || cat ~/.council/mode 2>/dev/null || echo "strict (default)"
 
 # Available commands
 ls ~/.claude/commands/ .claude/commands/ 2>/dev/null

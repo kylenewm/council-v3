@@ -6,11 +6,13 @@
 Toggle context injection modes for different work types.
 
 ## Usage
-- `/inject strict` - Production mode: ask first, verify after, respect invariants
-- `/inject sandbox` - POC mode: quick iteration with fixtures, move fast
-- `/inject scrappy` - Rapid mode: try fast, validate fast, no overhead
-- `/inject plan` - Planning mode: design before building, slow and steady
-- `/inject review` - Adversarial review mode: context-blind critique
+- `/inject research` - Research mode: collaborative brainstorming, preserve content
+- `/inject plan` - Planning mode: design before building, wait for approval
+- `/inject sandbox` - Sandbox mode: quick POC iteration, experimentation allowed
+- `/inject scrappy` - Scrappy mode: rapid validation, brute force OK
+- `/inject strict` - Strict mode: procedures + paths + DONE_REPORT
+- `/inject production` - Production mode: full rigor (mindset + procedures + paths)
+- `/inject review` - Review mode: adversarial context-blind critique
 - `/inject off` - Disable mode-specific injection (global rules still apply)
 - `/inject status` - Show current mode
 - `/inject local <mode>` - Set mode for current project only (creates .council/mode)
@@ -20,12 +22,12 @@ Toggle context injection modes for different work types.
 When user runs this command with argument `$ARGUMENTS`:
 
 1. If argument is `status`:
-   - Read `~/.council/current_inject.txt`
-   - Report current mode
+   - Check `.council/mode` first (local), then `~/.council/mode` (global)
+   - Report current mode and source
 
-2. If argument is `strict`, `sandbox`, `scrappy`, `plan`, `review`, or `off`:
-   - Write the argument to `~/.council/current_inject.txt`
-   - Confirm: "Injection mode set to [mode]. This will apply to all prompts until changed."
+2. If argument is a valid mode (`research`, `plan`, `sandbox`, `scrappy`, `strict`, `production`, `review`, `off`):
+   - Write the argument to `~/.council/mode`
+   - Confirm: "Global mode set to [mode]. This will apply to all projects unless overridden locally."
 
 3. If argument is `local <mode>`:
    - Create `.council/` directory if needed
@@ -37,35 +39,50 @@ When user runs this command with argument `$ARGUMENTS`:
 
 ## Mode Details
 
-### strict
-Production mode. Before implementing:
-- Confirm task scope
-- Run check_invariants.py before changes
-- Verify with tests after
-
-After completion:
-- Output DONE_REPORT
-- audit_done.py validates claims
-
-### sandbox
-POC/experimentation mode. Move fast:
-- Skip invariants checks
-- Use fixtures over real data
-- Prototype first, polish later
-
-### scrappy
-Rapid integration/validation mode. For bulk operations:
-- No DONE_REPORT required
-- No upfront file reading
-- Try → run → fix → next
-- Max 3 retries per item, then move on
-- Summary at end (N/M succeeded)
+### research
+Collaborative information gathering:
+- Think first, ask if uncertain
+- Preserve full content when reorganizing
+- Stay in current phase until explicitly moving forward
+- Don't jump to implementation
 
 ### plan
 Design before building:
-- Use code-architect subagent
-- Create implementation plan
-- Get approval before coding
+- Break into phases with clear deliverables
+- Identify invariants that must not break
+- Output structured plan document
+- Wait for approval before coding
+
+### sandbox
+POC/experimentation mode:
+- Experimentation allowed, failures are learning
+- Use fixtures over real data
+- Move fast, respect invariants
+- Don't ship to production
+
+### scrappy
+Rapid integration/validation mode:
+- No DONE_REPORT required
+- No upfront file reading (except invariants)
+- Try → run → fix → next
+- Brute force > clever when time matters
+- Summary at end (N/M succeeded)
+
+### strict
+Production procedures (no mindset):
+- Evidence over narrative
+- Read files before editing
+- Test after each significant change
+- DONE_REPORT required
+- Paths from invariants.yaml
+
+### production
+Full rigor for real users:
+- "Right > Fast" mindset
+- "You will naturally rush. Resist that."
+- All strict procedures
+- DONE_REPORT required
+- 5 mandatory questions before implementing
 
 ### review
 Adversarial review mode (context-blind):
@@ -84,9 +101,18 @@ Respond: "REJECT: Missing evidence: [x]. Cannot review without artifacts."
 - SUGGESTIONS: [nice to have]
 - VERDICT: APPROVE / REJECT / INCOMPLETE
 
+## Architecture
+
+```
+inject.sh (router)
+├── global.sh              ← always (push back, investigate)
+├── modes/{mode}.sh        ← based on mode setting
+└── framework.sh           ← if .council/framework set
+```
+
 ## Notes
-- Global mindset rules always apply regardless of mode
+- Global rules always apply regardless of mode
 - Modes are sticky until explicitly changed
-- Mode affects ALL prompts in this session via UserPromptSubmit hook
-- **Precedence:** local (.council/mode) > global (~/.council/current_inject.txt)
+- Mode affects ALL prompts via UserPromptSubmit hook
+- **Precedence:** local (.council/mode) > global (~/.council/mode) > default (strict)
 - Use `local` to set per-project modes that don't affect other agents/projects

@@ -1,18 +1,20 @@
 #!/bin/bash
-# Sandbox mode - quick POC/test building
+# Sandbox mode - experimentation and rapid POC building
 # For prototypes, experiments, fixture-based iteration
-# Activated via: /inject sandbox
 
 cat << 'EOF'
-[CONTEXT INJECTION - SANDBOX MODE]
-Quick POC for rapid iteration. Move fast, respect invariants.
+[MODE: SANDBOX]
+
+MINDSET:
+- Experimentation allowed, failures are learning
+- Move fast, respect invariants
+- Don't ship to production
 
 PATTERNS:
 1. Fixtures first - capture real data once, iterate infinitely
 2. Decouple expensive (API/LLM) from cheap (filtering/logic)
 3. test_mode configs - smaller limits, skip reviews
 4. Structured metrics: pass/fail + timing + quality scores
-5. Tier fixtures: core (~30s) vs extended (full check)
 
 WORKFLOW:
 1. Capture: Real data - save intermediate state

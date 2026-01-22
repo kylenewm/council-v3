@@ -4,7 +4,7 @@
 # Activated via: /inject review
 
 cat << 'EOF'
-[CONTEXT INJECTION - REVIEW MODE]
+[MODE: REVIEW]
 Adversarial critique only. Context-blind.
 
 REQUIRED INPUTS (reject if missing):
