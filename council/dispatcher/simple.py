@@ -47,6 +47,54 @@ from typing import Optional
 
 import yaml
 
+
+# --- Transcript Auto-Discovery ---
+
+def find_transcript_path(worktree: Path) -> Optional[Path]:
+    """Auto-discover Claude transcript path from worktree.
+
+    Converts worktree path to Claude project folder format and finds
+    the most recently modified .jsonl transcript file.
+
+    Args:
+        worktree: Path to the project working directory
+
+    Returns:
+        Path to the most recent transcript file, or None if not found
+
+    Example:
+        /Users/kylenewman/Downloads/council-v3
+        → ~/.claude/projects/-Users-kylenewman-Downloads-council-v3/
+        → most recent *.jsonl in that folder
+    """
+    try:
+        # Normalize path: resolve symlinks, get absolute path
+        worktree = worktree.resolve()
+
+        # Convert to Claude project folder name
+        # /Users/foo/bar → -Users-foo-bar
+        project_name = str(worktree).replace("/", "-")
+
+        # Claude stores projects in ~/.claude/projects/
+        project_folder = Path.home() / ".claude" / "projects" / project_name
+
+        if not project_folder.exists():
+            return None
+
+        # Find all .jsonl transcript files
+        jsonl_files = list(project_folder.glob("*.jsonl"))
+        if not jsonl_files:
+            return None
+
+        # Return the most recently modified one (active session)
+        return max(jsonl_files, key=lambda p: p.stat().st_mtime)
+
+    except Exception as e:
+        # Don't crash on discovery failure - just return None
+        print(f"[WARN] Transcript auto-discovery failed: {e}")
+        return None
+
+
 # Thread-safe queue for commands from background threads (Telegram)
 _command_queue: queue.Queue = queue.Queue()
 
@@ -143,6 +191,7 @@ class Agent:
     last_transcript_size: int = 0  # For rotation detection
     last_done_report_ts: Optional[float] = None  # When last DONE_REPORT was detected
     awaiting_done_report: bool = False  # True after task sent in strict mode
+    last_transcript_refresh: float = 0  # When we last refreshed transcript_path
     # Auto-audit
     auto_audit: bool = False  # Run audit automatically on DONE_REPORT
     invariants_path: Optional[Path] = None  # Path to invariants.yaml
@@ -154,6 +203,7 @@ class Agent:
 NOTIFY_COOLDOWN = 30.0  # Seconds between notifications per agent
 READY_NOTIFY_DELAY = 10.0  # Don't notify "ready" within this many seconds of sending a command
 STUCK_NOTIFY_COOLDOWN = 60.0  # Seconds between "stuck thinking" notifications per agent
+TRANSCRIPT_REFRESH_INTERVAL = 60.0  # Seconds between transcript path refreshes
 DIALOG_NOTIFY_COOLDOWN = 30.0  # Seconds between "dialog" notifications per agent
 MAX_NO_PROGRESS = 3  # Open circuit after this many iterations without progress
 TAIL_BYTES = 500_000  # 500KB tail window for DONE_REPORT detection
@@ -1159,7 +1209,13 @@ def load_config(path: Path) -> Config:
             worktree = Path(os.path.expanduser(agent_cfg["worktree"]))
         transcript_path = None
         if agent_cfg.get("transcript_path"):
+            # Explicit config takes precedence
             transcript_path = Path(os.path.expanduser(agent_cfg["transcript_path"]))
+        elif worktree:
+            # Auto-discover from worktree if not explicitly configured
+            transcript_path = find_transcript_path(worktree)
+            if transcript_path:
+                print(f"[CONFIG] Agent {agent_id}: auto-discovered transcript at {transcript_path.name}")
         invariants_path = None
         if agent_cfg.get("invariants_path"):
             invariants_path = Path(os.path.expanduser(agent_cfg["invariants_path"]))
@@ -1206,8 +1262,20 @@ def check_agents(config: Config) -> list[str]:
     - Guard 2: At least NOTIFY_COOLDOWN (30s) since last notify
     """
     changes = []
+    now = time.time()
 
     for agent in config.agents.values():
+        # Periodically refresh transcript path (handles session changes)
+        if agent.worktree and (now - agent.last_transcript_refresh >= TRANSCRIPT_REFRESH_INTERVAL):
+            new_transcript = find_transcript_path(agent.worktree)
+            if new_transcript and new_transcript != agent.transcript_path:
+                agent.transcript_path = new_transcript
+                # Reset offset since we're watching a new file
+                agent.last_transcript_offset = 0
+                agent.last_transcript_size = 0
+                changes.append(f"{agent.name}: transcript refreshed to {new_transcript.name}")
+            agent.last_transcript_refresh = now
+
         try:
             output = tmux_capture(agent.pane_id)
             if output is None:
