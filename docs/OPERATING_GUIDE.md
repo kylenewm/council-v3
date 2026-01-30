@@ -54,8 +54,9 @@ Practical guide for running and using the council multi-agent system.
 
 **Mode Precedence (LOCAL overrides GLOBAL):**
 ```
-1. .council/mode           (project-local, checked FIRST)
-2. ~/.council/current_inject.txt   (global fallback)
+1. .council/mode    (project-local, checked FIRST)
+2. ~/.council/mode  (global fallback)
+3. default: strict  (if no mode file exists)
 ```
 
 **Set mode for one project only:**
@@ -65,7 +66,7 @@ echo "sandbox" > .council/mode
 
 **Set mode globally (all projects):**
 ```bash
-echo "strict" > ~/.council/current_inject.txt
+echo "strict" > ~/.council/mode
 # OR
 /inject strict
 ```

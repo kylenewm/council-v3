@@ -12,11 +12,25 @@ Multi-agent orchestration for Claude Code.
 - **LLM Council** — Optional multi-model planning (draft → critique → synthesize)
 - **Plugins** — Ralph loop/queue for long-running and batched tasks
 
+---
+
+## Roadmap
+
+*Goal: Get closer to MVP-quality output for technical discussions with Eng/DS. Single AI coding tools have behavioral biases, and any effective feature built within one ecosystem will be replicated by the vendor or others—so multi-agent cross-tool approaches are the only path for true leverage worth the time investment. Experimental tooling for personal workflow optimization.*
+
+- **Adversarial testing suite** — Automated code review using agents in different coding tools (e.g., Cursor finds bugs, Gemini judges validity, Claude Code fixes). Includes planning phase—original multi-model planning lacked codebase context and web search. Runs end-to-end without manual intervention.
+- **Simulation gym** — Validate new system features by having multiple Claude Code agents execute task sequences, measuring whether changes actually improve outcomes rather than blindly adding features.
+- **Autonomous workflows with HITL** — Parallelize work across agents with multiple retry attempts before requiring intervention. Useful for iterative tasks (e.g., slide decks) where models need several passes.
+
+---
+
 ## Demo
 
 https://github.com/user-attachments/assets/2b279dc6-2026-4c22-aab2-2c879b29f730
 
 *Note: This demo shows an earlier version with just tmux panes and Pushover notifications. Current version includes mode injection, quality hooks, plugins, and more.*
+
+---
 
 ## Architecture
 

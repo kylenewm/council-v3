@@ -61,7 +61,21 @@ REFLECTIONS.md
 LOG.md
 STATE.md
 QUIRKS.md
+LEARNINGS.md
+HANDOFF_*.md
 specs/
 tests/fixtures/tmux_outputs/
 sandbox/
+
+# Experimental/research directories
+adversarial_test/
+blind_test_*/
+blind_test_experiment/
+
+# Temporary planning/audit docs
+*_AUDIT.md
+IMPLEMENTATION_QUEUE.md
+RESUME_DESCRIPTION.txt
+
+# Local config files
 *.local.json

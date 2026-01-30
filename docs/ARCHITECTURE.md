@@ -4,13 +4,14 @@
 
 | File | Lines | Purpose |
 |------|-------|---------|
-| `council/council.py` | 345 | Multi-model draft, critique, synthesis via OpenRouter |
-| `council/client.py` | 139 | OpenRouter API client with retry logic |
-| `council/cli.py` | 251 | CLI commands (`council plan`, `council refine`) |
-| `council/bootstrap.py` | 314 | Generate CLAUDE.md and project files from plan |
-| `council/dispatcher/simple.py` | 955 | Main dispatcher - routing, queue, circuit breaker |
-| `council/dispatcher/telegram.py` | 229 | Telegram bot for voice/text commands |
-| `council/dispatcher/gitwatch.py` | 120 | Git progress detection for circuit breaker |
+| `council/council.py` | ~345 | Multi-model draft, critique, synthesis via OpenRouter |
+| `council/client.py` | ~140 | OpenRouter API client with retry logic |
+| `council/cli.py` | ~355 | CLI commands (`council plan`, `council refine`) |
+| `council/bootstrap.py` | ~315 | Generate CLAUDE.md and project files from plan |
+| `council/dispatcher/simple.py` | ~1850 | Main dispatcher - routing, queue, circuit breaker, mode injection |
+| `council/dispatcher/telegram.py` | ~240 | Telegram bot for voice/text commands |
+| `council/dispatcher/gitwatch.py` | ~225 | Git progress detection for circuit breaker |
+| `council/dispatcher/socket_server.py` | ~275 | Unix socket server for voice input |
 
 ## Config Files
 
