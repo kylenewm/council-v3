@@ -1,16 +1,11 @@
 # Council v3
 
-Multi-agent orchestration for Claude Code.
+Behavioral guardrails and automation for AI coding agents.
 
-- **Dispatcher** — Routes commands to Claude Code instances running in tmux panes
-- **Input sources** — Unix socket (for voice via Shortcuts/Wispr), Telegram bot, Pushover
-- **Task queue** — Queue tasks per agent, auto-dequeue when ready
-- **Auto-continue** — Keeps agents working with circuit breaker (git-based progress detection)
-- **Mode injection** — Inject context (strict/sandbox/plan/review) to control behavior
-- **Quality hooks** — TDD enforcement, auto-formatting, lint checks via Claude Code hooks
-- **Slash commands** — `/test`, `/commit`, `/ship`, `/review`, `/inject`, and more
-- **LLM Council** — Optional multi-model planning (draft → critique → synthesize)
-- **Plugins** — Ralph loop/queue for long-running and batched tasks
+**Quality:** Claude tends to say yes and rush to "done." Mode injection makes it stop, question assumptions, and actually verify work before finishing. Switch between production (answer 4 questions before acting, prove completion), sandbox (move fast), research (challenge its own thinking), etc.
+**Automation:** Queue up tasks, let agents keep working with auto-continue, and catch runaway loops with a circuit breaker.
+**Dispatcher:** Send commands via voice, Telegram, or socket to multiple Claude Code sessions running in tmux.
+**Other:** Multi-model planning across LLMs, slash commands for common workflows (/test, /commit, /ship).
 
 ---
 
@@ -29,6 +24,20 @@ Multi-agent orchestration for Claude Code.
 https://github.com/user-attachments/assets/2b279dc6-2026-4c22-aab2-2c879b29f730
 
 *Note: This demo shows an earlier version with just tmux panes and Pushover notifications. Current version includes mode injection, quality hooks, plugins, and more.*
+
+---
+
+## Features
+
+- **Dispatcher** — Routes commands to Claude Code instances running in tmux panes
+- **Input sources** — Unix socket (for voice via Shortcuts/Wispr), Telegram bot, Pushover
+- **Task queue** — Queue tasks per agent, auto-dequeue when ready
+- **Auto-continue** — Keeps agents working with circuit breaker (git-based progress detection)
+- **Mode injection** — Inject context (strict/sandbox/plan/review) to control behavior
+- **Quality hooks** — TDD enforcement, auto-formatting, lint checks via Claude Code hooks
+- **Slash commands** — `/test`, `/commit`, `/ship`, `/review`, `/inject`, and more
+- **LLM Council** — Optional multi-model planning (draft → critique → synthesize)
+- **Plugins** — Ralph loop/queue for long-running and batched tasks
 
 ---
 
