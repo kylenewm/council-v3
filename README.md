@@ -2,16 +2,19 @@
 
 Behavioral guardrails and automation for AI coding agents.
 
-**Quality:** Claude tends to say yes and rush to "done." Mode injection makes it stop, question assumptions, and actually verify work before finishing. Switch between production (answer 4 questions before acting, prove completion), sandbox (move fast), research (challenge its own thinking), etc.
+Claude tends to always agree and rush to completion (especially after 2 failed attempts).  Mode injection tries to reduce poor tendencies, question assumptions, and actually verify work before finishing. You can between a few modes like production (reminds model at every step to question impact and validity of all changes), sandbox (for rapid prototyping), research (to challenge its own thinking and assumptions), etc.
+
 **Automation:** Queue up tasks, let agents keep working with auto-continue, and catch runaway loops with a circuit breaker.
+
 **Dispatcher:** Send commands via voice, Telegram, or socket to multiple Claude Code sessions running in tmux.
+
 **Other:** Multi-model planning across LLMs, slash commands for common workflows (/test, /commit, /ship).
 
 ---
 
 ## Roadmap
 
-*Goal: Get closer to MVP-quality output for technical discussions with Eng/DS. Single AI coding tools have behavioral biases, and any effective feature built within one ecosystem will be replicated by the vendor or others—so multi-agent cross-tool approaches are the only path for true leverage worth the time investment. Experimental tooling for personal workflow optimization.*
+*Goal: Get closer to MVP-quality output for technical discussions with Eng/DS. Single AI coding tools have behavioral biases, and any effective feature built within one ecosystem will be replicated by the vendor or others—so multi-agent cross-tool approaches are the only path for true leverage worth the time investment. Most projects are experimental tooling for personal workflow optimization.*
 
 - **Adversarial testing suite** — Automated code review using agents in different coding tools (e.g., Cursor finds bugs, Gemini judges validity, Claude Code fixes). Includes planning phase—original multi-model planning lacked codebase context and web search. Runs end-to-end without manual intervention.
 - **Simulation gym** — Validate new system features by having multiple Claude Code agents execute task sequences, measuring whether changes actually improve outcomes rather than blindly adding features.
